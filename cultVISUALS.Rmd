@@ -1,0 +1,247 @@
+---
+title: "VISUALISE EPIC-IIASA (CZ) OUTPUTS"
+author: "Katerina Krizova"
+# date: '2022-07-14'
+date: '`r format(Sys.Date(), "%B %d, %Y")`'
+output:
+  pdf_document: default
+  html_document: default
+  word_document: default
+editor_options:
+  chunk_output_type: console
+knit: (
+  function(inputFile, encoding) { 
+  
+    pSubTitle <- ""
+  
+    rmarkdown::render( 
+      input       = inputFile, 
+      encoding    = encoding, 
+      params      = list(sub_title = pSubTitle),      
+      output_file = pSubTitle) })
+---
+
+
+```{r include=FALSE}
+library(sf)
+library(sp)
+library(rgdal)
+require(tidyverse)
+require(reshape2)
+require(ggpubr)
+
+path_in <- "c:/Users/krizovak/Documents/__EPIC__/R/" 
+
+path_met <- "C:/Users/krizovak/Documents/__EPIC__/R/_tables/chmu/" 
+path_tab <- "c:/Users/krizovak/Documents/__EPIC__/R/_tables/" 
+path_shp <- "c:/Users/krizovak/Documents/__EPIC__/R/_shapefiles/" 
+
+path_out <- "c:/Users/krizovak/Documents/__EPIC__/R/_cultivarRESULTS/" 
+path_rmd <- "c:/Users/krizovak/Documents/__EPIC__/R/markdown/" 
+
+period <- 1989:2019 # time period
+time_per <- "1989-2019"
+title2a <- "Simulated "
+title2b <- paste0(" in ", time_per)
+
+# crop <- "ALFA"
+# crop <- "BARL"
+# crop <- "CSIL"
+crop <- "CORN"
+# crop <- "OATS"
+# crop <- "FPEA"
+# crop <- "POTA"
+# crop <- "RAPE"
+# crop <- "RYE"
+# crop <- "SGBT"
+# crop <- "SUNF"
+# crop <- "SOYB"
+# crop <- "WWHT"
+
+
+# crop ID + seasonality
+
+if(crop == "ALFA"){
+  cropid <- 31 
+  cropname <- " alfalfa"
+  seas <- "OTH"
+} else if (crop == "BARL"){
+  cropid <- 14
+  cropname <- " spring barley"
+  seas <- "SPG"
+} else if (crop == "CSIL"){
+  cropid <- 29
+  cropname <- " corn silage"
+  seas <- "SPG"
+} else if (crop == "CORN"){
+  cropid <- 2
+  cropname <- " corn"
+  seas <- "SPG"
+} else if (crop == "OATS"){
+  cropid <- 16
+  cropname <- " oat"
+  seas <- "SPG"
+} else if (crop == "FPEA"){
+  cropid <- 26
+  cropname <- " field peas"
+  seas <- "SPG"
+} else if (crop == "POTA"){
+  cropid <- 51
+  cropname <- " potatoes"
+  seas <- "SPG"
+} else if (crop == "RAPE"){
+  cropid <- 122
+  cropname <- " winter rapeseed"
+  seas <- "WIN"
+} else if (crop == "RYE") {
+  cropid <- 19
+  cropname <- " rye"
+  seas <- "WIN"
+} else if (crop == "SGBT"){
+  cropid <- 62
+  cropname <- " sugarbeet"
+  seas <- "SPG"
+} else if (crop == "SUNF"){
+  cropid <- 7
+  cropname <- " sunflower"
+  seas <- "SPG"
+} else if (crop == "SOYB"){
+  cropid <- 1
+  cropname <- " soybean"
+  seas <- "SPG"
+} else if (crop == "WWHT"){
+  cropid <- 10
+  cropname <- " winter wheat"
+  seas <- "WIN"
+} else {
+  print("ZEROO")
+}
+
+pick_scen <- read.table(paste0(path_out, crop, "/", crop, "_selectedScen.csv"), header = T, sep = ";")
+
+gridmap <- st_read(paste0(path_shp, "10km_simu_5514.shp"), crs = 5514)
+```
+
+## EEA GRID for the Czech Republic
+
+European Environmental Agency  
+10km spatial resolution  
+total count for the Czech Republic is 891 grids  
+
+
+* [EEA Reference Grid](https://www.eea.europa.eu/data-and-maps/data/eea-reference-grids-2)
+
+```{r echo = FALSE}
+
+
+ggplot(gridmap, aes(geometry = geometry))+
+  geom_sf()+
+  # ggtitle("EEA GRID CZ, n = 891") + 
+  coord_sf()+
+  theme_void()+
+  theme(axis.ticks.x = element_blank(), axis.text.x = element_blank(), 
+        axis.ticks.y = element_blank(), axis.text.y = element_blank(),
+        plot.title = element_text(hjust = 0.5))
+```
+
+
+```{r include=FALSE}
+
+mout <-sp::merge(pick_scen, gridmap, by = "GRID_NO")
+
+```
+
+## `r title2a` precipitation `r title2b` for `r cropname`
+
+### yearly average
+
+```{r echo=FALSE}
+ggplot(mout, aes(geometry = geometry, fill= avgPRCP))+
+  geom_sf()+
+  # ggtitle(paste0("Average Yield in 1989-2019: ", crop)) + 
+  scale_fill_gradient("[mm]", 
+    low = "lightblue",
+    high = "darkblue",
+    space = "Lab",
+    na.value = "grey50",
+    guide = "colourbar",
+    aesthetics = "fill")+
+  coord_sf()+
+  theme_void()+
+  theme(axis.ticks.x = element_blank(), axis.text.x = element_blank(), 
+        axis.ticks.y = element_blank(), axis.text.y = element_blank(),
+        plot.title = element_text(hjust = 0.5))
+
+```
+
+
+## `r title2a` potential evapotranspiration `r title2b` for `r cropname`
+
+### yearly average
+
+```{r echo=FALSE}
+ggplot(mout, aes(geometry = geometry, fill= avgPET))+
+  geom_sf()+
+  # ggtitle(paste0("Average Yield in 1989-2019: ", crop)) + 
+  scale_fill_gradient("[mm]", 
+    low = "lightblue",
+    high = "darkslategrey",
+    space = "Lab",
+    na.value = "grey50",
+    guide = "colourbar",
+    aesthetics = "fill")+
+  coord_sf()+
+  theme_void()+
+  theme(axis.ticks.x = element_blank(), axis.text.x = element_blank(), 
+        axis.ticks.y = element_blank(), axis.text.y = element_blank(),
+        plot.title = element_text(hjust = 0.5))
+
+```
+
+## `r title2a` temeperature stress days `r title2b` for `r cropname`
+
+### yearly average
+
+```{r echo=FALSE}
+ggplot(mout, aes(geometry = geometry, fill= avgTS))+
+  geom_sf()+
+  # ggtitle(paste0("Average Yield in 1989-2019: ", crop)) + 
+  scale_fill_gradient("[days]", 
+    low = "lightblue",
+    high = "red",
+    space = "Lab",
+    na.value = "grey50",
+    guide = "colourbar",
+    aesthetics = "fill")+
+  coord_sf()+
+  theme_void()+
+  theme(axis.ticks.x = element_blank(), axis.text.x = element_blank(), 
+        axis.ticks.y = element_blank(), axis.text.y = element_blank(),
+        plot.title = element_text(hjust = 0.5))
+
+```
+
+
+
+## `r title2a`  yield `r title2b` for `r cropname`
+
+### yealy average
+
+```{r echo=FALSE}
+ggplot(mout, aes(geometry = geometry, fill= avgYLD))+
+  geom_sf()+
+  # ggtitle(paste0("Average Yield in 1989-2019: ", crop)) + 
+  scale_fill_gradient("[t/ha]", 
+    low = "yellow",
+    high = "darkgreen",
+    space = "Lab",
+    na.value = "grey50",
+    guide = "colourbar",
+    aesthetics = "fill")+
+  coord_sf()+
+  theme_void()+
+  theme(axis.ticks.x = element_blank(), axis.text.x = element_blank(), 
+        axis.ticks.y = element_blank(), axis.text.y = element_blank(),
+        plot.title = element_text(hjust = 0.5))
+```
+

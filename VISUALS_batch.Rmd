@@ -1,0 +1,166 @@
+---
+title: "Spatial distribution of parameters simulated by EPIC-IIASA (CZ), v2"
+author: "Katerina Krizova"
+date: "`r format(Sys.Date(), '%Y-%m-%d')`"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(font.family = "Arial", font.size = 9)
+# fig.cap = paste0("Average Yield in 1989-2019 for ", cropname),
+```
+
+
+```{r include=FALSE}
+
+# packages
+
+library(sf)
+library(sp)
+library(rgdal)
+require(tidyverse)
+require(reshape2)
+require(ggpubr)
+
+# paths
+
+path_in <- "c:/Users/krizovak/Documents/__EPIC__/R/" 
+
+path_met <- "C:/Users/krizovak/Documents/__EPIC__/R/_tables/chmu/" 
+path_tab <- "c:/Users/krizovak/Documents/__EPIC__/R/_tables/" 
+path_shp <- "c:/Users/krizovak/Documents/__EPIC__/R/_shapefiles/" 
+
+path_out <- "c:/Users/krizovak/Documents/__EPIC__/R/_cultivarRESULTS/" 
+path_rmd <- "c:/Users/krizovak/Documents/__EPIC__/R/markdown/" 
+
+# text to paste
+
+period <- 1989:2019 # time period
+time_per <- "1989-2019"
+title2a <- "Simulated "
+title2b <- paste0(" in ", time_per)
+
+# crops and parameters
+
+
+croplist <- c("BARL", "CORN", "WWHT") # update when new crop simulations are finished
+# "BARL", "CSIL", "CORN", "OATS", "FPEA", "POTA", "RAPE", "RYE", "SGBT", "SUNF", "SOYB", "WWHT"
+
+```
+
+
+```{r echo = F, results='hide'}
+for(i in 1:length(croplist)) {  
+  crop <- croplist[i]
+  if(crop == "ALFA"){
+    cropid <- 31 
+    cropname <- "alfalfa"
+    seas <- "OTH"
+  } else if (crop == "BARL"){
+    cropid <- 14
+    cropname <- "spring barley"
+    seas <- "SPG"
+  } else if (crop == "CSIL"){
+    cropid <- 29
+    cropname <- "corn silage"
+    seas <- "SPG"
+  } else if (crop == "CORN"){
+    cropid <- 2
+    cropname <- "corn"
+    seas <- "SPG"
+  } else if (crop == "OATS"){
+    cropid <- 16
+    cropname <- "oat"
+    seas <- "SPG"
+  } else if (crop == "FPEA"){
+    cropid <- 26
+    cropname <- "field peas"
+    seas <- "SPG"
+  } else if (crop == "POTA"){
+    cropid <- 51
+    cropname <- "potatoes"
+    seas <- "SPG"
+  } else if (crop == "RAPE"){
+    cropid <- 122
+    cropname <- "winter rapeseed"
+    seas <- "WIN"
+  } else if (crop == "RYE") {
+    cropid <- 19
+    cropname <- "rye"
+    seas <- "WIN"
+  } else if (crop == "SGBT"){
+    cropid <- 62
+    cropname <- "sugarbeet"
+    seas <- "SPG"
+  } else if (crop == "SUNF"){
+    cropid <- 7
+    cropname <- "sunflower"
+    seas <- "SPG"
+  } else if (crop == "SOYB"){
+    cropid <- 1
+    cropname <- "soybean"
+    seas <- "SPG"
+  } else if (crop == "WWHT"){
+    cropid <- 10
+    cropname <- "winter wheat"
+    seas <- "WIN"
+  } else {
+    print("ZEROO")
+}
+  pick_scen <- read.table(paste0(path_out, crop, "/", crop, "_selectedScen.csv"), header = T, sep = ";")
+  gridmap <- st_read(paste0(path_shp, "10km_simu_5514.shp"), crs = 5514)
+  mout <-sp::merge(pick_scen, gridmap, by = "GRID_NO")
+  # assign(paste0(crop, "_mout"), mout)
+  ggp_yld <- ggplot(mout, aes(geometry = geometry, fill= avgYLD))+
+    geom_sf()+
+    ggtitle(paste0("Average Yield in 1989-2019 for ", cropname)) + 
+    scale_fill_gradient("[t/ha]", 
+    low = "yellow",
+    high = "darkgreen",
+    space = "Lab",
+    na.value = "grey50",
+    guide = "colourbar",
+    aesthetics = "fill")+
+    coord_sf()+
+    theme_void()+
+    theme(axis.ticks.x = element_blank(), axis.text.x = element_blank(), 
+        axis.ticks.y = element_blank(), axis.text.y = element_blank(),
+        plot.title = element_text(hjust = 0.5))
+  print(ggp_yld)
+  ggp_prcp <- ggplot(mout, aes(geometry = geometry, fill= avgPRCP))+
+  geom_sf()+
+  ggtitle(paste0("Average Yield in 1989-2019 for ", cropname)) + 
+  scale_fill_gradient("[mm]", 
+    low = "lightblue",
+    high = "darkblue",
+    space = "Lab",
+    na.value = "grey50",
+    guide = "colourbar",
+    aesthetics = "fill")+
+  coord_sf()+
+  theme_void()+
+  theme(axis.ticks.x = element_blank(), axis.text.x = element_blank(), 
+        axis.ticks.y = element_blank(), axis.text.y = element_blank(),
+        plot.title = element_text(hjust = 0.5))
+  print(ggp_prcp)
+}
+
+```
+
+```{r include = F}
+```
+
+
+```{r include = F}
+# 
+# rmarkdown::render("c:/Users/krizovak/Documents/__EPIC__/R/markdown/VISUALS_batch.Rmd",
+#                output_file =  paste("hist", i, ".pdf", sep=''))
+```
+
+
+```{r}
+getwd()
+devtools::session_info()
+```
+

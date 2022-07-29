@@ -1,0 +1,592 @@
+---
+title: "EPIC run Cultivars"
+author: "Katerina Krizova"
+date: "`r format(Sys.Date(), '%Y-%m-%d')`"
+output: 
+  pdf_document: 
+    toc: yes
+    toc_depth: 3
+---
+
+\newpage 
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F, message=FALSE, fig.dim = c(8, 4))
+
+# install.packages("tidyverse", dependencies = T)
+# install.packages("gdata")
+require(tidyverse)
+require(gdata) # write.fwf
+
+```
+
+# INITIAL SETUP
+
+## paths 
+
+```{r echo = T}
+path_in <- "c:/Users/krizovak/Documents/__EPIC__/R/" 
+
+path_met <- "C:/Users/krizovak/Documents/__EPIC__/R/_tables/v3_czsk/" 
+path_tab <- "c:/Users/krizovak/Documents/__EPIC__/R/_tables/" 
+path_shp <- "c:/Users/krizovak/Documents/__EPIC__/R/_shapefiles/" 
+
+path_out <- "c:/Users/krizovak/Documents/__EPIC__/R/_cultivarRESULTS/" 
+```
+
+## time period
+
+```{r echo = T}
+
+period <- 1989:2019 
+```
+
+## crop params
+
+```{r}
+
+# crop <- "ALFA"
+crop <- "BARL"
+# crop <- "CSIL"
+# crop <- "CORN"
+# crop <- "OATS"
+# crop <- "FPEA"
+# crop <- "POTA"
+# crop <- "RAPE"
+# crop <- "RYE"
+# crop <- "SGBT"
+# crop <- "SUNF"
+# crop <- "SOYB"
+# crop <- "WWHT"
+
+# crop ID + seasonality
+
+if(crop == "ALFA"){
+  cropid <- 31 
+  seas <- "OTH"
+} else if (crop == "BARL"){
+  cropid <- 14
+  seas <- "SPG"
+} else if (crop == "CSIL"){
+  cropid <- 29
+  seas <- "SPG"
+} else if (crop == "CORN"){
+  cropid <- 2
+  seas <- "SPG"
+} else if (crop == "OATS"){
+  cropid <- 16
+  seas <- "SPG"
+} else if (crop == "FPEA"){
+  cropid <- 26
+  seas <- "SPG"
+} else if (crop == "POTA"){
+  cropid <- 51
+  seas <- "SPG"
+} else if (crop == "RAPE"){
+  cropid <- 122
+  seas <- "WIN"
+} else if (crop == "RYE") {
+  cropid <- 19
+  seas <- "WIN"
+} else if (crop == "SGBT"){
+  cropid <- 62
+  seas <- "SPG"
+} else if (crop == "SUNF"){
+  cropid <- 7
+  seas <- "SPG"
+} else if (crop == "SOYB"){
+  cropid <- 1
+  seas <- "SPG"
+} else if (crop == "WWHT"){
+  cropid <- 10
+  seas <- "WIN"
+} else {
+  print("ZEROO")
+}
+
+# basal and optimal temperature 
+
+if(crop == "ALFA"){
+  top <- 25 
+  tbs <- 1 
+} else if (crop %in% c("BARL", "OATS", "WWHT")){
+  top <- 15 
+  tbs <- 0 
+} else if (crop == "CSIL"){
+  top <- 25 
+  tbs <- 10 
+} else if (crop == "CORN"){
+  top <- 22 
+  tbs <- 8
+} else if (crop == "FPEA"){
+  top <- 15 
+  tbs <- 1
+} else if (crop == "POTA"){
+  top <- 17 
+  tbs <- 7
+} else if (crop == "RAPE"){
+  top <- 13.5 
+  tbs <- 0
+} else if (crop == "RYE"){
+  top <- 12.5 
+  tbs <- 0
+} else if (crop == "SGBT"){
+  top <- 22
+  tbs <- 4
+} else if (crop %in% c("SOYB", "SUNF")){
+  top <- 25
+  tbs <- 10
+} else {
+  print("ZEROO")
+}
+
+```
+* crop: `r crop`
+
+* crop ID: `r cropid`
+
+* seasonality: `r seas`
+
+* basal temperature: `r tbs`
+
+* optimal temperature: `r top`
+
+# CROP CALENDAR
+
+> **`r crop`_crop_cal**
+
+contains information about 
+
+* crop and cropid
+
+* planting and harvest days for specific cultivars (also julian)
+
+file necessary for:
+
+* ?
+
+```{r}
+
+# *** READ *** READ *** READ ** READ ***
+cultivars <- read.table(paste0(path_out, crop, "/", crop, "_cultivars.csv"), header = TRUE, sep = ";")
+jul_cal <- read.table(paste0(path_tab, "jul_cal.csv"), header = TRUE, sep = ";") # potrebujeme ho?
+# *** READ *** READ *** READ ** READ ***
+
+
+crop_cal <- cultivars %>%
+  select(PLN_DAY, PLN_MON, PLN_JUL, HRV_DAY, HRV_MON, HRV_JUL) %>%
+  # mutate(CROPID = rep(c(cropid), times = 30)) %>%
+  mutate(CROPID = rep(c(cropid), times = nrow(cultivars))) %>%
+  mutate(CROP = rep(c(crop), times = nrow(cultivars)))
+
+
+# *** WR *** WR *** WR ** WR ***
+write.table(crop_cal, file = paste0(path_out, crop, "/", crop, "_crop_cal.csv"), row.names=FALSE, sep = ";")
+# *** WR *** WR *** WR ** WR ***
+
+print(crop_cal)
+
+```
+
+# CALCULATING PHU FROM DLY FILES
+
+calculates optimal PHU (potential heat units) for each cultivar
+
+required parameters: **tbs** and **top**
+
+
+```{r}
+
+# czsk dly
+
+# *** READ *** READ *** READ ** READ ***
+wsnames <- list.files(path_met, pattern="*.dly")  # Identify file names # all dly files in weather folder
+czsk_grid <- read.table(paste0(path_tab, "czsk_GRID.csv"), header = TRUE, sep = ",") %>% 
+  mutate(dly = paste0(GRID, ".dly")) # selected grids for CZSK without overlaps, n=1427
+# *** READ *** READ *** READ ** READ ***
+
+df <- as.data.frame(wsnames)
+czsk_merge <- merge(czsk_grid, df, by.x = "dly", by.y = "wsnames", all = T) 
+getrid <- czsk_merge %>% 
+  filter(is.na(GRID))
+chosen <- merge(czsk_grid, df, by.x = "dly", by.y = "wsnames")
+chosen_dly <- merge(czsk_grid, df, by.x = "dly", by.y = "wsnames") %>% 
+  select(dly)
+
+chosen_vec <- as.vector(chosen_dly) %>% 
+  unlist(use.names=FALSE)
+
+# batch processing dly
+
+# wsnames <- list.files(path_met, pattern="*.dly")  # Identify file names
+a_cols <- c("year", "month", "day", "srad", "tmax", "tmin", "prcp", "rhum", "wind")
+
+for(i in 1:length(chosen_vec)) {  # FUNKCNI; 'chosen_vec' = CZSK × 'wsnames' = CZ
+  a <- read.table(paste0(path_met, wsnames[i])) # reads the DLY file
+  names(a) <- a_cols  # rename the columns
+  a$month <- sprintf("%02d", as.numeric(a$month)) # month in format 01
+  a$day <- sprintf("%02d", as.numeric(a$day)) # day in format 01
+  a$datefull <- paste(a$year, a$month, a$day, sep = "-")
+  a$datefull <- as.Date(a$datefull, format=c("%Y-%m-%d")) # creates full date
+  # a$datefull <- format(a$datefull, format= "%Y-%m-%d")
+  # ab <- a %>% filter(year %in% c(1995:2017)) %>% 
+  ab <- a %>% filter(year %in% period) %>% # zkousim zadavani time period externe, kdyztak zadat rucne
+    mutate(tavg = (tmax+tmin)/2) %>% # average temperature required for PHU calculation
+    group_by(year) %>%  # https://stackoverflow.com/questions/12925063/numbering-rows-within-groups-in-a-data-frame
+    mutate(julday = seq_along(prcp)) %>%
+    mutate(phu = case_when(tavg <= tbs ~ 0,
+                           (tavg > tbs)&(tavg < top) ~ tavg,
+                           tavg >= top ~ top)) %>%
+    mutate(phusum = cumsum(phu))
+  ac <- ab %>%
+    filter(julday %in% crop_cal$HRV_JUL) %>%
+    group_by(julday)
+  ac$julday <- as.factor(ac$julday)
+  ad <- aggregate(ac[, 14], list(ac$julday), mean) # aggregates collumn 14 (==phusum) and calculates mean value for every julday
+  ae <- merge(cultivars, ad, by.x = "HRV_JUL", by.y = "Group.1") # adds phusum value into cultivars list
+  af <- ae[, c("runid","PLN_JUL","HRV_JUL","LVP","sow_dat","PLN_MON","PLN_DAY",
+               "hrv_dat","HRV_MON","HRV_DAY","phusum")] # reorganize the column order
+  af$source <- paste0(wsnames[i]) # adds column with the DLY name
+  dir.create (paste0(path_out, crop, "/phusum"), showWarnings = FALSE) # show warnings F -> folder exists, but it does not interfere with the following outcomes (https://stackoverflow.com/questions/4216753/check-existence-of-directory-and-create-if-doesnt-exist)
+  write.table(af, file = paste0(path_out, crop, "/phusum/", wsnames[i], ".csv"), sep = ",", row.names = F)
+}
+
+rm(a)
+rm(ab)
+rm(ac)
+rm(ad)
+rm(ae)
+rm(af)
+# rm(cultivars)
+
+# combine phu files
+
+# *** READ *** READ *** READ ** READ ***
+phusumA <- list.files(path = paste0(path_out, crop, "/phusum/"),  # Identify all CSV files
+                   pattern = "*.csv", full.names = TRUE) %>%
+  lapply(read_csv) %>%                              # Store all files in list
+  bind_rows                                         # Combine data sets into one data set
+# *** READ *** READ *** READ ** READ ***
+
+
+phusumA$phusum <- round((phusumA$phusum-(phusumA$phusum*0.1)), digits = 2)# lower the avg PHU by 10 %, rounds on 2 decimals
+phusumA$source <- str_sub(phusumA$source,1,nchar(phusumA$source)-4)
+
+
+# *** WR *** WR *** WR ** WR ***
+write.table(phusumA, file = paste0(path_out, crop, "/", crop, "_phusumA.csv"), row.names=FALSE, sep = ";")
+# *** WR *** WR *** WR ** WR ***
+
+```
+
+# PHU CALENDAR
+
+> **`r crop`_phu_cal**
+
+```{r}
+
+# *** READ *** READ *** READ ** READ ***
+eea10_simu <- read.table(paste0(path_tab, "10km_SimU_n891.csv"), header = TRUE, sep = ",")  
+phusumA <- read.table(paste0(path_out, crop, "/", crop, "_phusumA.csv"), header = TRUE, sep = ";")
+# *** READ *** READ *** READ ** READ **
+
+phu_cal0 <- merge(eea10_simu, phusumA, by.x = "GRID_NO", by.y = "source", all = T) # 891 grid * 27 cultivars (BARL) = 24057
+
+phu_cal1 <- phu_cal0 %>% 
+  mutate(CROPID = cropid) %>% 
+  mutate(CROP = crop) %>% 
+  rename("PHU" = phusum) %>% 
+  rename("scenario" = runid) %>% 
+  select(SimUID, scenario, GRID_NO, KLIMREG, CROPID, CROP, PLN_JUL, HRV_JUL, LVP, PHU) %>% 
+  group_by(GRID_NO, scenario) %>% 
+  dplyr::mutate(runid = cur_group_id())
+
+
+# *** WR *** WR *** WR ** WR ***
+write.table(phu_cal1, paste0(path_out, crop, "/", crop, "_phu_cal.csv"), row.names = F, quote = F, sep = ";")
+# *** WR *** WR *** WR ** WR ***
+
+phu_cal_runid <- phu_cal1 %>% 
+  select(SimUID, GRID_NO, scenario, runid, KLIMREG) # link of runid, scenario, GRID and original SimU
+
+
+# *** WR *** WR *** WR ** WR ***
+write.table(phu_cal_runid, paste0(path_out, crop, "/", crop, "_phu_cal_runid.csv"), row.names = F, quote = F, sep = ";")
+# *** WR *** WR *** WR ** WR ***
+
+rm(phu_cal0)
+rm(phu_cal1)
+rm(phusumA)
+
+```
+
+# EPIC INPUT FILES
+
+```{r echo=T}
+
+# create directories
+dir.create (paste0(path_out, crop, "/epicrun"), showWarnings = FALSE)
+dir.create (paste0(path_out, crop, "/OPSC"), showWarnings = FALSE)
+dir.create (paste0(path_out, crop, "/PARM"), showWarnings = FALSE)
+dir.create (paste0(path_out, crop, "/_simulated"), showWarnings = FALSE)
+```
+
+
+## 2 PRINT
+
+files that needs to be uploaded to MS Access projects and print in Visual Basic
+
+### OPC
+
+> **`r crop`_OPSC_cultivars_2print.txt** 
+
+operation schedules
+
+necessary table: **OPSC_Param_SVK13.txt**
+
+```{r}
+
+# crop_parm file has different crop abbrevs -> adjust:
+
+if(crop == "ALFA"){
+  cropp <- "ALF"
+} else if (crop == "BARL"){
+  cropp <- "BAR"
+} else if (crop == "CSIL"){
+  cropp <- "MAI"
+} else if (crop == "CORN"){
+  cropp <- "MAI" # ???????????????????????????????????????
+} else if (crop == "OATS"){
+  cropp <- "OAT"
+} else if (crop == "FPEA"){
+  cropp <- "PEA"
+} else if (crop == "POTA"){
+  cropp <- "POT"
+} else if (crop == "RAPE"){
+  cropp <- "RAP"
+} else if (crop == "RYE") {
+  cropp <- "RYE"
+} else if (crop == "SGBT"){
+  cropp <- "SGB"
+} else if (crop == "SUNF"){
+  cropp <- "SNF"
+} else if (crop == "SOYB"){
+  cropp <- "SOY"
+} else if (crop == "WWHT"){
+  cropp <- "WHE"
+} else {
+  print("ZEROO")
+}
+
+
+# *** READ *** READ *** READ ** READ ***
+phu_cal <- read.table(paste0(path_out, crop, "/", crop, "_phu_cal_grid.csv"), header = TRUE, sep = ";")
+crop_cal <- read.table(paste0(path_out, crop, "/", crop, "_crop_cal.csv"), header = TRUE, sep = ";")
+crop_parm <- read.table(paste0(path_tab, "OPSC_Param_SVK13.txt"), header = TRUE, sep = ";")  # all crops by default
+# *** READ *** READ *** READ ** READ ***
+
+crop_parm <- crop_parm %>%
+  filter(CROP == cropp)  %>%   # filter parameters for current crop only
+  select(-CROP)
+
+# combine tables for OPSC / step by step according to ms access
+
+
+opsc1 <- merge(phu_cal, crop_cal, by = c("CROP", "CROPID", "PLN_JUL", "HRV_JUL")) 
+opsc2 <- merge(opsc1, crop_parm, by = c("CROPID")) # 24057 (grid*cultivars) * 6 (operations) = 144342
+
+opsc3 <- opsc2 %>% # 8640
+  mutate(OPMONTH = case_when(OPERATION %in% c("HARV", "KILL") ~ HRV_MON,
+                             OPERATION %in% c("FRTK", "FRTP", "TILL", "SOW") ~ PLN_MON)) %>%
+  mutate(OPDAY = case_when(OPERATION %in% c("HARV", "KILL") ~ HRV_DAY,
+                           OPERATION %in% c("FRTK", "FRTP", "TILL", "SOW") ~ PLN_DAY)) %>%
+  mutate(Seq = case_when(seas == "SPG" ~ Seq1, 
+                         seas == "WIN" ~ Seq2))  %>% # sequence of operations differ for SPG and WIN crops
+  mutate(PARAMETER2 = case_when(OPERATION == "SOW" ~ round(PHU, 0),
+                                OPERATION %in% c("FRTK", "FRTP") ~ 25, TRUE ~ 0)) %>%  # https://www.sharpsightlabs.com/blog/case-when-r/
+  select(runid, scenario, GRID_NO,	KLIMREG,	CROPID,	CROP,	CropSpec,	OPERATION,	LUN, Year, OPMONTH,	OPDAY,
+         Seq,	IHC,	TYPE,	PARAMETER1,	PARAMETER2,	PARAMETER3,	PARAMETER4,
+         PARAMETER5,	PARAMETER6,	PARAMETER7) %>% 
+  arrange(GRID_NO, scenario, Seq) 
+  # group_by(GRID_NO, scenario) %>% 
+  # dplyr::mutate(SimUId = cur_group_id()) 
+
+# *** WR *** WR *** WR ** WR ***
+write.table(opsc3, file = paste0(path_out, crop, "/", crop, "_OPSC_cultivars_2print.txt"),
+            row.names=FALSE, quote=FALSE, sep = ";")
+# *** WR *** WR *** WR ** WR ***
+
+rm(opsc1)
+rm(opsc2)
+rm(opsc3)
+rm(crop_cal)
+rm(crop_parm)
+
+
+```
+
+### EPICRUN
+
+> **`r crop`_epicrun_cultivars_2print.txt** 
+
+EPICRUN for initial calibrations runs works with only 1 SIT and SOL file for all grids
+
+* **SIT**  
+
+    + CZ: 119
+    + SK: ?
+
+* **SOL** 
+
+    + CZ: 10
+    + SK: 7 ?
+    
+* **OPC** created for each 'runid' (runid 167 = 167.opc)
+
+* **DLY** created for each 'runid' (runid 167 = 167.dly) / same for WP1
+
+* **WINDID** set as 1 for each 'runid'
+
+
+    
+```{r}
+
+# *** READ *** READ *** READ ** READ ***
+phu_cal <- read.table(paste0(path_out, crop, "/", crop, "_phu_cal_grid.csv"), header = TRUE, sep = ";")
+# *** READ *** READ *** READ ** READ ***
+
+# modify table to epicrun
+
+epicrun0 <- phu_cal %>%
+  select(runid, GRID_NO) %>%
+  mutate(SIT = 119) %>%
+  mutate(SOL = 10) %>%
+  mutate(OPC = runid) %>%
+  mutate(WP1 = GRID_NO) %>%
+  mutate(DLY = GRID_NO) %>%
+  mutate(WINDID = 1) %>%
+  distinct()
+
+# *** WR *** WR *** WR ** WR ***
+write.table(epicrun0, file = paste0(path_out, crop, "/", crop, "_epicrun_cultivars_2print.txt"),
+                               row.names=FALSE, quote=FALSE, sep = ";")
+# *** WR *** WR *** WR ** WR ***
+
+rm(epicrun0)
+
+```
+
+
+### PARMFILES
+
+> **`r crop`_PARM_cultivars_2print.txt** 
+
+?
+
+necessary table: **CZ_PARM0810tab_v0.txt**
+
+```{r}
+
+# *** READ *** READ *** READ ** READ ***
+parm0 <- read.table(paste0(path_tab, "CZ_PARM0810tab_v0.txt"), header = TRUE, sep = ";")
+sel_simu <- read.table(paste0(path_tab, "10km_SimU_n891.csv"), header = TRUE, sep = ",")
+# *** READ *** READ *** READ ** READ ***
+
+parm1 <- parm0 %>%
+  filter(SimUID %in% sel_simu$SimUID)
+
+parm2 <- merge(parm1, phu_cal_runid, by.x = "SimUID", by.y = "SimUID", all.y = T)
+
+# *** WR *** WR *** WR ** WR ***
+write.table(parm2, file = paste0(path_out, crop, "/", crop, "_PARM_cultivars_2print.txt"),
+            row.names=FALSE, quote=FALSE, sep = ";")
+# *** WR *** WR *** WR ** WR ***
+
+
+
+```
+
+
+## 4 EPIC
+
+files ready to be used by EPIC
+
+
+### OPSCCOM
+
+**OPSCCOM.dat**
+
+?
+
+```{r}
+
+# *** READ *** READ *** READ ** READ ***
+phu_cal <- read.table(paste0(path_out, crop, "/", crop, "_phu_cal_grid.csv"), header = TRUE, sep = ";")
+# *** READ *** READ *** READ ** READ ***
+ 
+
+opsccom <- phu_cal %>%
+  select(runid) %>%
+  # rename("SimUID" = GRID_NO) %>%
+  # select(SimUID) %>%
+  mutate(file = paste(runid,".opc", sep = "")) %>%
+  distinct()
+
+
+# *** WR *** WR *** WR ** WR ***
+write.fwf(opsccom, paste0(path_out, crop, "/OPSCCOM.dat"),
+          rownames = FALSE, colnames = FALSE,
+          formatInfo = TRUE, sep = "  ")
+# *** WR *** WR *** WR ** WR ***
+
+```
+
+
+### SITECOM
+
+**SITECOM.dat**
+
+?
+
+```{r}
+sitecom <- phu_cal %>% 
+  select(runid) %>% 
+  mutate(file = "119.sit") %>%
+  distinct()
+
+# *** WR *** WR *** WR ** WR ***
+write.fwf(sitecom,paste0(path_out, crop, "/SITECOM.dat"),
+          rownames = FALSE, colnames = FALSE,
+          formatInfo = TRUE, sep = "  ")
+# *** WR *** WR *** WR ** WR ***
+
+```
+
+
+### SOILCOM
+
+**SOILCOM.dat**
+
+?
+
+```{r}
+soilcom <- phu_cal %>%
+  select(runid) %>% 
+  mutate(file = "10.sol") %>% # 10 == chernozem ; 210 == sandy soil
+  distinct()
+
+# *** WR *** WR *** WR ** WR ***
+write.fwf(soilcom, paste0(path_out, crop, "/SOILCOM.dat"),
+          rownames = FALSE, colnames = FALSE,
+          formatInfo = TRUE, sep = "  ")
+# *** WR *** WR *** WR ** WR ***
+
+rm(opsccom)
+rm(sitecom)
+rm(soilcom)
+# rm(phu_cal_grid)
+
+```
+
+
+

@@ -1,0 +1,387 @@
+---
+title: "SIMULATED PARAMETERS OF EPIC-IIASA (CZ), v2"
+author: "Katerina Krizova"
+date: "`r format(Sys.Date(), '%Y-%m-%d')`"
+output: 
+  pdf_document: 
+    toc: yes
+    toc_depth: 3
+---
+
+```{r include=FALSE}
+library(sf)
+library(sp)
+library(rgdal)
+require(tidyverse)
+require(reshape2)
+require(ggpubr)
+library(knitr)
+
+
+path_in <- "c:/Users/krizovak/Documents/__EPIC__/R/" 
+
+path_met <- "C:/Users/krizovak/Documents/__EPIC__/R/_tables/chmu/" 
+path_tab <- "c:/Users/krizovak/Documents/__EPIC__/R/_tables/" 
+path_shp <- "c:/Users/krizovak/Documents/__EPIC__/R/_shapefiles/" 
+
+path_out <- "c:/Users/krizovak/Documents/__EPIC__/R/_cultivarRESULTS/" 
+
+path_rmd <- "c:/Users/krizovak/Documents/__EPIC__/R/markdown/" 
+
+```
+
+
+# EPIC-IIASA (CZ) v2
+
+* v2: june-september 2022
+
+* 891 [EEA grids](https://www.eea.europa.eu/data-and-maps/data/eea-reference-grids-2) as simulations units
+* spatial resolution 10 km
+
+* initial runs with:
+  + 119.sit
+  + 10.sol
+
+```{r echo = FALSE, results='hide', fig.cap= "EEA grid CZ, sr 10 km"}
+
+gridmap <- st_read(paste0(path_shp, "10km_simu_5514.shp"), crs = 5514)
+
+ggplot(gridmap, aes(geometry = geometry))+
+  geom_sf()+
+  # ggtitle("EEA GRID CZ, n = 891") + 
+  coord_sf()+
+  theme_void()+
+  theme(axis.ticks.x = element_blank(), axis.text.x = element_blank(), 
+        axis.ticks.y = element_blank(), axis.text.y = element_blank(),
+        plot.title = element_text(hjust = 0.5))
+```
+
+
+# SIMULATIONS FOR SELECTING REGIONAL-SPECIFIC PLANTING SCENARIOS
+
+## CULTIVARS
+
+*TASK:*
+
+Create cultivars for the most common crops in CZ
+
+* alfalfa
+* spring barley
+* corn silage
+* corn
+* oat
+* field peas
+* potatoes
+* winter rapeseed
+* rye
+* sugarbeet
+* sunflower
+* soybean
+* winter wheat
+
+```{r include = F}
+croplist <- c("BARL", "CORN", "WWHT") # update when new crop simulations are finished
+# croplist <- c("ALFA", "BARL", "CSIL", "CORN", "OATS", "FPEA", "POTA", "RAPE", "RYE", "SGBT", "SUNF", "SOYB", "WWHT")
+```
+
+*RESULT:*
+
+```{r echo=F, results='asis'}
+for (i in 1:length(croplist)) {
+   crop <- croplist[i]
+    if(crop == "ALFA"){
+    cropid <- 31 
+    cropname <- "alfalfa"
+    seas <- "OTH"
+  } else if (crop == "BARL"){
+    cropid <- 14
+    cropname <- "spring barley"
+    seas <- "SPG"
+  } else if (crop == "CSIL"){
+    cropid <- 29
+    cropname <- "corn silage"
+    seas <- "SPG"
+  } else if (crop == "CORN"){
+    cropid <- 2
+    cropname <- "corn"
+    seas <- "SPG"
+  } else if (crop == "OATS"){
+    cropid <- 16
+    cropname <- "oat"
+    seas <- "SPG"
+  } else if (crop == "FPEA"){
+    cropid <- 26
+    cropname <- "field peas"
+    seas <- "SPG"
+  } else if (crop == "POTA"){
+    cropid <- 51
+    cropname <- "potatoes"
+    seas <- "SPG"
+  } else if (crop == "RAPE"){
+    cropid <- 122
+    cropname <- "winter rapeseed"
+    seas <- "WIN"
+  } else if (crop == "RYE") {
+    cropid <- 19
+    cropname <- "rye"
+    seas <- "WIN"
+  } else if (crop == "SGBT"){
+    cropid <- 62
+    cropname <- "sugarbeet"
+    seas <- "SPG"
+  } else if (crop == "SUNF"){
+    cropid <- 7
+    cropname <- "sunflower"
+    seas <- "SPG"
+  } else if (crop == "SOYB"){
+    cropid <- 1
+    cropname <- "soybean"
+    seas <- "SPG"
+  } else if (crop == "WWHT"){
+    cropid <- 10
+    cropname <- "winter wheat"
+    seas <- "WIN"
+  } else {
+    print("ZEROO")
+}
+   cultivars <- read.table(paste0(path_out, crop, "/", crop, "_cultivars.csv"), header = TRUE, sep = ";")
+   # cat('\n')
+   # cat("This is a heading for ", croplist[i] , "\n")
+   # kable(cultivars, caption = paste0("Cultivars of ", cropname))
+   # cat('\n')
+   tab <- kable(cultivars, caption = paste0("Cultivars of ", cropname))
+   print(tab)
+}
+
+```
+
+## SIMULATION WITH ALL CULTIVARS
+
+* run simulation for all cultivars of each crops 
+* select best performing scenarion for final simulations
+  + selection of cultivar (planting scenario) is based on ........ ???
+
+### PRE-SIMULATION WORKFLOW
+
+*TASK:*
+
+* prepare all necessary files for EPIC run
+
+> in R
+
+* create csv with all cultivars
+* using the script 'EPIC_runCult.R' create:
+    + crop calendar
+    + phu files 
+    + phu calendar
+    + opc files 2 print
+    + epicrun 2 print
+    + OPSCCOM
+    + SITECOM
+    + SOILCOM
+    + parm files 2 print
+
+ > in EPIC-IIASA (CZ), v2 
+
+* open SITE <- copy SITECOM
+* open SOIL <- copy SOILCOM
+* open OPSC <- copy OPSCCOM
+* open OPSC <- copy OPS files (printed in MS Access 'InputFileManager' from 'crop'_OPSC_cultivars_2print.csv)
+* open EPIC0810 <- copy epicruns
+  + (printed in MS Access 'ModelRunsManager' from 'crop'_epicrun_cultivars_2print.csv)
+* open EPIC0810 <- copy batchfile 
+  + (printed in MS Access 'ModelRunsManager')
+* open EPIC0810 <- copy PARM files 
+  + (printed in MS Access 'ModelRunsManager' from 'crop'_PARM_cultivars_2print.csv)
+      + when loading csv: PARM22 and PARM48 -> edit datatype!; replace NAs
+      + rename PARM0810_1 -> PARM0810
+
+---
+                  
+> EXECUTE (takes hours for all cultivars)
+
+---
+
+
+### AFTER-SIMULATION WORKFLOW
+
+*TASK:*
+
+* harvest output files and store results in crop-specific folder
+* delete output files from EPIC working environment
+
+> in MS Access 'ModelRunsManager'
+
+* harvest ACM
+* harvest ACY
+* delete EPICouts
+
+ > continue with 'EPIC_hrvCult.R
+
+
+*RESULT:*
+
+
+```{r echo = F, message = F, results='asis'}
+for(i in 1:length(croplist)) {  
+  crop <- croplist[i]
+  if(crop == "ALFA"){
+    cropid <- 31 
+    cropname <- "alfalfa"
+    seas <- "OTH"
+  } else if (crop == "BARL"){
+    cropid <- 14
+    cropname <- "spring barley"
+    seas <- "SPG"
+  } else if (crop == "CSIL"){
+    cropid <- 29
+    cropname <- "corn silage"
+    seas <- "SPG"
+  } else if (crop == "CORN"){
+    cropid <- 2
+    cropname <- "corn"
+    seas <- "SPG"
+  } else if (crop == "OATS"){
+    cropid <- 16
+    cropname <- "oat"
+    seas <- "SPG"
+  } else if (crop == "FPEA"){
+    cropid <- 26
+    cropname <- "field peas"
+    seas <- "SPG"
+  } else if (crop == "POTA"){
+    cropid <- 51
+    cropname <- "potatoes"
+    seas <- "SPG"
+  } else if (crop == "RAPE"){
+    cropid <- 122
+    cropname <- "winter rapeseed"
+    seas <- "WIN"
+  } else if (crop == "RYE") {
+    cropid <- 19
+    cropname <- "rye"
+    seas <- "WIN"
+  } else if (crop == "SGBT"){
+    cropid <- 62
+    cropname <- "sugarbeet"
+    seas <- "SPG"
+  } else if (crop == "SUNF"){
+    cropid <- 7
+    cropname <- "sunflower"
+    seas <- "SPG"
+  } else if (crop == "SOYB"){
+    cropid <- 1
+    cropname <- "soybean"
+    seas <- "SPG"
+  } else if (crop == "WWHT"){
+    cropid <- 10
+    cropname <- "winter wheat"
+    seas <- "WIN"
+  } else {
+    print("ZEROO")
+}
+  pick_scen <- read.table(paste0(path_out, crop, "/", crop, "_selectedScen.csv"), header = T, sep = ";")
+  gridmap <- st_read(paste0(path_shp, "10km_simu_5514.shp"), crs = 5514, quiet = T)
+  mout <-sp::merge(pick_scen, gridmap, by = "GRID_NO")
+  # assign(paste0(crop, "_mout"), mout)
+  cat("  \n")
+  cat("\n\n### ", cropname, "\n")
+  cat("  \n")
+  ggp_yld <- ggplot(mout, aes(geometry = geometry, fill= avgYLD))+
+    geom_sf()+
+    ggtitle(paste0("Average yield of ", cropname, " in 1989-2019")) + 
+    scale_fill_gradient("[t/ha]", 
+    low = "yellow",
+    high = "darkgreen",
+    space = "Lab",
+    na.value = "grey50",
+    guide = "colourbar",
+    aesthetics = "fill")+
+    coord_sf()+
+    theme_void()+
+    theme(axis.ticks.x = element_blank(), axis.text.x = element_blank(), 
+        axis.ticks.y = element_blank(), axis.text.y = element_blank(),
+        plot.title = element_text(hjust = 0.5))
+  print(ggp_yld)
+  ggp_prcp <- ggplot(mout, aes(geometry = geometry, fill= avgPRCP))+
+  geom_sf()+
+  ggtitle(paste0("Precipitation in 1989-2019 for ", cropname)) + 
+  scale_fill_gradient("[mm]", 
+    low = "lightblue",
+    high = "darkblue",
+    space = "Lab",
+    na.value = "grey50",
+    guide = "colourbar",
+    aesthetics = "fill")+
+  coord_sf()+
+  theme_void()+
+  theme(axis.ticks.x = element_blank(), axis.text.x = element_blank(), 
+        axis.ticks.y = element_blank(), axis.text.y = element_blank(),
+        plot.title = element_text(hjust = 0.5))
+  print(ggp_prcp)
+  ggp_pet <- ggplot(mout, aes(geometry = geometry, fill= avgPET))+
+  geom_sf()+
+  ggtitle(paste0("Potential evapotranspiration in 1989-2019 for ", cropname)) + 
+  scale_fill_gradient("[mm]", 
+    low = "lightblue",
+    high = "darkslategrey",
+    space = "Lab",
+    na.value = "grey50",
+    guide = "colourbar",
+    aesthetics = "fill")+
+  coord_sf()+
+  theme_void()+
+  theme(axis.ticks.x = element_blank(), axis.text.x = element_blank(), 
+        axis.ticks.y = element_blank(), axis.text.y = element_blank(),
+        plot.title = element_text(hjust = 0.5))
+  print(ggp_pet)
+  ggp_ts <- ggplot(mout, aes(geometry = geometry, fill= avgTS))+
+  geom_sf()+
+  ggtitle(paste0("Temperature stress in 1989-2019 for ", cropname)) + 
+  scale_fill_gradient("[days]", 
+    low = "lightblue",
+    high = "red",
+    space = "Lab",
+    na.value = "grey50",
+    guide = "colourbar",
+    aesthetics = "fill")+
+  coord_sf()+
+  theme_void()+
+  theme(axis.ticks.x = element_blank(), axis.text.x = element_blank(), 
+        axis.ticks.y = element_blank(), axis.text.y = element_blank(),
+        plot.title = element_text(hjust = 0.5))
+  print(ggp_ts)
+
+}
+```
+
+# FINAL SIMULATIONS
+
+*TASK:*
+
+Run EPIC-IIASA (CZ) simulations for the most common crops in CZ
+
+*highlight finished crops below*
+
+* alfalfa
+* spring barley
+* corn silage
+* corn
+* oat
+* field peas
+* potatoes
+* winter rapeseed
+* rye
+* sugarbeet
+* sunflower
+* soybean
+* winter wheat
+
+# R INFO
+
+[GIT repo]()
+
+```{r}
+getwd()
+devtools::session_info()
+```
