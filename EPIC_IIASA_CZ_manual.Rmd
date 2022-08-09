@@ -1,0 +1,190 @@
+---
+title: 'EPIC-IIASA (CZ) :: v3 :: manual'
+author: "Katerina Krizova"
+date: "`r format(Sys.Date(), '%Y-%m-%d')`"
+output: 
+  pdf_document: 
+    toc: yes
+    toc_depth: 3
+---
+
+\newpage 
+
+# VERSIONS OF EPIC-IIASA (CZ)
+
+* v0 : RS
+* v1 : KK at IIASA, 2021
+* v2 : KK at IIASA, 2022
+* v3 : KK at IIASA, 2022; CZ + SK
+
+
+\newpage 
+
+# CROPS
+
+## Selected crops for CZ and SK
+
+### Alfalfa
+
+* crop "ALFA"
+* crop ID = 31 
+* seasonality = other
+
+### Spring barley
+
+* crop "BARL"
+* crop ID = 14 
+* seasonality = spring
+
+### Corn silage
+
+* crop "CSIL"
+* crop ID = 29 
+* seasonality = spring
+
+### Corn 
+
+* crop "CORN"
+* crop ID = 2 
+* seasonality = spring
+
+### Oats 
+
+* crop "OATS"
+* crop ID = 16 
+* seasonality = spring
+
+### Field peas 
+
+* crop "FPEA"
+* crop ID = 26
+* seasonality = spring
+
+### Potato
+
+* crop "FPEA"
+* crop ID = 51
+* seasonality = spring
+
+### Winter rapeseed 
+
+* crop "RAPE"
+* crop ID = 122
+* seasonality = winter
+
+### Rye
+
+* crop "RYE"
+* crop ID = 19
+* seasonality = winter
+
+### Sugar beet 
+
+* crop "SGBT"
+* crop ID = 62
+* seasonality = spring
+
+### Sunflower 
+
+* crop "SUNF"
+* crop ID = 7
+* seasonality = spring
+
+### Soybeans 
+
+* crop "SOYB"
+* crop ID = 1
+* seasonality = spring
+
+### Winter wheat
+
+* crop "WWHT"
+* crop ID = 10
+* seasonality = winter
+
+
+\newpage
+
+# R and RMD SCRIPTS
+
+Naming rules:
+
+
+* **CHMU_** : manipulation with chmu data (CZ)
+* **CGMS_** : interpolation of chmu data (CZ)
+* **EPIC_** : scripts used directly for generating or harvesting EPIC files
+* **PROC_** : processing scripts, short, usually one time runs
+* **VISUALS_** : outputs visualisation scripts
+
+* **_runCult** : run on cultivars, BEFORE EPIC simulations
+* **_runCrop** : run on crop, BEFORE EPIC simulations
+
+* **_hrvCult** : run on cultivars, AFTER EPIC simulations
+* **_hrvCrop** : run on crop, AFTER EPIC simulations
+
+
+## R
+
+```{r echo = F}
+rpath <- "C:/Users/krizovak/Documents/__EPIC__/R/__epicIIASAcz/"
+```
+
+Folder for storing R scripts:
+
+> `r rpath`
+
+```{r echo = F}
+list.files(path = "C:/Users/krizovak/Documents/__EPIC__/R/__epicIIASAcz/", pattern = NULL, all.files = FALSE,
+           full.names = FALSE, recursive = FALSE,
+           ignore.case = FALSE, include.dirs = FALSE, no.. = FALSE)
+
+```
+
+
+## RMD
+
+```{r echo = F}
+rmdpath <- "C:/Users/krizovak/Documents/__EPIC__/R/markdown/__epicRMD/"
+```
+
+Folder for storing R scripts:
+
+> `r rmdpath`
+
+
+```{r echo = F}
+list.files(paste0(rmdpath), pattern = NULL, all.files = FALSE,
+           full.names = FALSE, recursive = FALSE,
+           ignore.case = FALSE, include.dirs = FALSE, no.. = FALSE)
+
+```
+
+
+## GIT
+
+R and RMD scripts are stored on [GITHUB](https://github.com/about)
+
+> R scripts: [__epicIIASAcz](https://github.com/krizovakk/__epicIIASAcz)
+ 
+> RMD scripts: [__epicRMD](https://github.com/krizovakk/__epicRMD)
+
+\newpage
+
+# SIMULATION WORKFLOW
+
+## Cultivars
+
+### Run Cultivars
+
+### Hrv Cultivars
+
+## Crop
+
+### Run Crop
+
+### Hrv Crop
+
+\newpage
+
+# VALIDATION
+

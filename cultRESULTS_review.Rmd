@@ -36,7 +36,7 @@ period <- 1989:2019 # time period
 
 
 # crop <- "ALFA"
-# crop <- "BARL"
+crop <- "BARL"
 # crop <- "CSIL"
 # crop <- "CORN"
 # crop <- "OATS"
@@ -47,7 +47,7 @@ period <- 1989:2019 # time period
 # crop <- "SGBT"
 # crop <- "SUNF"
 # crop <- "SOYB"
-crop <- "WWHT"
+# crop <- "WWHT"
 
 
 # crop ID + seasonality
@@ -128,7 +128,7 @@ wcy <- case_when(crop %in% c("ALFA", "BARL", "FPEA", "RYE", "WWHT") ~ 1.12,
 print(cropname)
 
 # *** READ *** READ *** READ ** READ ***
-phu_cal_grid <- read.table(paste0(path_out, crop, "/", crop, "_phu_cal_grid.csv"), header = TRUE, sep = ";")
+phu_cal <- read.table(paste0(path_out, crop, "/", crop, "_phu_cal.csv"), header = TRUE, sep = ";")
 jul_cal <- read.table(paste0(path_tab, "jul_cal.csv"), header = TRUE, sep = ";")
 cultivars <- read.table(paste0(path_out, crop, "/", crop, "_cultivars.csv"), header = TRUE, sep = ";")
 
@@ -138,14 +138,14 @@ acy <- read.table(paste0(path_out, crop, "/_simulated/ACY_msacc.txt"), header = 
 # *** READ *** READ *** READ ** READ ***
 
 outtab0 <- merge(acm, acy, all = T) 
-outtab <- merge(outtab0, phu_cal_grid, by.x = "runid", by.y = "runid") # join ACM and ACY with SCENARIO
+outtab <- merge(outtab0, phu_cal, by.x = "runid", by.y = "runid") # join ACM and ACY with SCENARIO
 outtab$YLDG <- (outtab$YLDG*wcy) # WCY parameter / fraction water in yield 
-outtab <- outtab %>%
-  mutate(PO = case_when(KLIMREG == 0 ~ "K",
-                        KLIMREG %in% c(1:3) ~ "R",
-                        KLIMREG %in% c(4:5) ~ "C",
-                        KLIMREG %in% c(6:7) ~ "B",
-                        KLIMREG %in% c(8:9) ~ "H"))
+# outtab <- outtab %>%
+#   mutate(PO = case_when(KLIMREG == 0 ~ "K",
+#                         KLIMREG %in% c(1:3) ~ "R",
+#                         KLIMREG %in% c(4:5) ~ "C",
+#                         KLIMREG %in% c(6:7) ~ "B",
+#                         KLIMREG %in% c(8:9) ~ "H"))
 
 # rm(acm)
 # rm(acy)
@@ -193,8 +193,9 @@ for(i in 1:length(scen_list)) {
   # pick_scen <- read.table(paste0(path_out, crop, "/", crop, "_selectedScen.csv"), header = T, sep = ";")
   scene <- scen_list[i]
   filt_scen <- filter(out_scen, scenario == scene)
-  gridmap <- st_read(paste0(path_shp, "10km_simu_5514.shp"), crs = 5514, quiet = T)
-  mout <-sp::merge(filt_scen, gridmap, by = "GRID_NO")
+  # gridmap <- st_read(paste0(path_shp, "10km_simu_5514.shp"), crs = 5514, quiet = T) # CZ
+  gridmap <- st_read(paste0(path_shp, "EEA_CZSK_10km_n1427_5514.shp"), crs = 5514, quiet = T) # CZ i SK
+  mout <- sp::merge(filt_scen, gridmap, by.x = "GRID_NO", by.y = "GRID")
   ggp_yld <- ggplot(mout, aes(geometry = geometry, fill= avgYLD))+
     geom_sf()+
     ggtitle(paste0("Average yield of ", cropname, " in 1989-2019 / scenario: ", scene )) + 
@@ -204,8 +205,8 @@ for(i in 1:length(scen_list)) {
     space = "Lab",
     na.value = "grey50",
     guide = "colourbar",
-    aesthetics = "fill", 
-    limits = c(1.2,4.8))+ # !!!!!!!!!!!!!!!! adjust
+    aesthetics = "fill",
+    limits = c(1,7))+ # !!!!!!!!!!!!!!!! adjust
     coord_sf()+
     theme_void()+
     theme(axis.ticks.x = element_blank(), axis.text.x = element_blank(), 
