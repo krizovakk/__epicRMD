@@ -1,0 +1,1014 @@
+---
+title: "EPIC harvest Cultivars - parallelized"
+author: "Katerina Krizova"
+date: "`r format(Sys.Date(), '%Y-%m-%d')`"
+output: 
+  pdf_document: 
+    toc: yes
+    toc_depth: 3
+---
+
+\newpage 
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F, message=FALSE, fig.dim = c(8, 4))
+
+# install.packages("tidyverse", dependencies = T)
+# install.packages("gdata")
+require(tidyverse)
+require(gdata) # write.fwf
+library(sf)
+library(sp)
+library(rgdal)
+require(reshape2)
+require(ggpubr)
+library(knitr)
+
+```
+
+# INITIAL SETUP
+
+## paths 
+
+```{r echo = T}
+
+path_in <- "c:/Users/krizovak/Documents/__EPIC__/R/" 
+
+path_met <- "C:/Users/krizovak/Documents/__EPIC__/R/_tables/v3_czsk/" 
+path_epic <- "c:/Users/krizovak/Documents/__EPIC__/EPIC_CS_v4_Aug2022/" 
+
+path_tab <- "c:/Users/krizovak/Documents/__EPIC__/R/_tables/" 
+path_shp <- "c:/Users/krizovak/Documents/__EPIC__/R/_shapefiles/" 
+
+path_out <- "c:/Users/krizovak/Documents/__EPIC__/R/_cultivarRESULTS/" 
+
+```
+
+## time period
+
+```{r echo = T}
+period <- 1989:2019 
+```
+
+
+
+## crop params
+
+```{r}
+
+# crop <- "ALFA"
+crop <- "BARL"
+# crop <- "CSIL"
+# crop <- "CORN"
+# crop <- "OATS"
+# crop <- "FPEA"
+# crop <- "POTA"
+# crop <- "RAPE"
+# crop <- "RYE"
+# crop <- "SGBT"
+# crop <- "SUNF"
+# crop <- "SOYB"
+# crop <- "WWHT"
+
+
+# crop ID + seasonality
+
+if(crop == "ALFA"){
+    cropid <- 31 
+    cropname <- "alfalfa"
+    seas <- "OTH"
+  } else if (crop == "BARL"){
+    cropid <- 14
+    cropname <- "spring barley"
+    seas <- "SPG"
+  } else if (crop == "CSIL"){
+    cropid <- 29
+    cropname <- "corn silage"
+    seas <- "SPG"
+  } else if (crop == "CORN"){
+    cropid <- 2
+    cropname <- "corn"
+    seas <- "SPG"
+  } else if (crop == "OATS"){
+    cropid <- 16
+    cropname <- "oat"
+    seas <- "SPG"
+  } else if (crop == "FPEA"){
+    cropid <- 26
+    cropname <- "field peas"
+    seas <- "SPG"
+  } else if (crop == "POTA"){
+    cropid <- 51
+    cropname <- "potatoes"
+    seas <- "SPG"
+  } else if (crop == "RAPE"){
+    cropid <- 122
+    cropname <- "winter rapeseed"
+    seas <- "WIN"
+  } else if (crop == "RYE") {
+    cropid <- 19
+    cropname <- "rye"
+    seas <- "WIN"
+  } else if (crop == "SGBT"){
+    cropid <- 62
+    cropname <- "sugarbeet"
+    seas <- "SPG"
+  } else if (crop == "SUNF"){
+    cropid <- 7
+    cropname <- "sunflower"
+    seas <- "SPG"
+  } else if (crop == "SOYB"){
+    cropid <- 1
+    cropname <- "soybean"
+    seas <- "SPG"
+  } else if (crop == "WWHT"){
+    cropid <- 10
+    cropname <- "winter wheat"
+    seas <- "WIN"
+  } else {
+    print("ZEROO")
+}
+
+
+# WCY parameter (fraction water in yield ) WCY = 0.12 -> yield + wcy -> 1.12
+
+# ??? RAPE ???
+
+wcy <- case_when(crop %in% c("ALFA", "BARL", "FPEA", "RYE", "WWHT") ~ 1.12,
+                 crop %in% c("CSIL", "CORN") ~ 1.15, 
+                 crop %in% c("OATS") ~ 1.10, 
+                 crop %in% c("POTA") ~ 1.8, 
+                 crop %in% c("SGBT") ~ 1.84, 
+                 crop %in% c("SUNF") ~ 1.06, 
+                 crop %in% c("SOYB") ~ 1.13) 
+
+epic_parall <- c(1:8)
+```
+* crop: `r crop`
+
+* crop ID: `r cropid`
+
+* crop name: `r cropname`
+
+* seasonality: `r seas`
+
+* WCY parameter: `r wcy`
+
+\newpage 
+
+# HARVEST OUTPUT FILES (in progress)
+
+Steps necessary to take AFTER simulation
+
+## COPY AND PASTE ACM AND ACY
+
+EPIC output files are stored in **EPIC_CS_X/EPIC0810** folder
+
+Backup files:
+
+* create a folder '_outs' in cultivar results folder
+
+* create a subfolder 'crop_outs_currentDate' in '_outs' folder
+
+* copy all files in both newly created folders, so that: 
+
+  + there is a backup in date-named folder
+  
+  + there are always the latest ACM and ACY files to be further worked with
+
+```{r COPY ACM AND ACY}
+
+# batch
+
+for(i in 1:length(epic_parall)) {
+  currentDate <- Sys.Date()
+  dir.create(paste0(path_out, crop, "/_outs/outs_", currentDate), showWarnings = FALSE) #showWarnings = FALSE -> folder is not overwritten, files copied into the firstly created one
+  path_source <- paste0(path_epic,"EPIC_CS_", i, "/EPIC0810/")
+  Louts <- list.files(path_source, pattern = ".ACM|.ACY") # pattern either ACM or ACY (only AC was not enough because of WORKSPACE file)
+  newDir <- paste0(path_out, crop, "/_outs/outs_", currentDate, "/")
+  newDir2 <- paste0(path_out, crop, "/_outs/")
+  file.copy(from = paste0(path_source, Louts),   # Output files backup in folder with date
+          to = paste0(newDir, Louts))
+  file.copy(from = paste0(path_source, Louts),   # Latest ouptut files in '_outs' folder
+          to = paste0(newDir2, Louts), overwrite = TRUE)
+}
+
+# ACM and ACY files are deleted befor a new run (EPIC_runCult.Rmd)
+
+# # !!! FINAL !!! FINAL !!! FINAL !!!
+# for(i in 1:length(epic_parall)) {
+#   path_source <- paste0(path_epic,"EPIC_CS_", i, "/EPIC0810/")
+#   Louts <- list.files(path_source, pattern = ".ACM|.ACY")
+#   file.remove(paste0(path_source, Louts)) # ACM and ACY files removal from EPIC0810 folder
+# }
+# # !!! FINAL !!! FINAL !!! FINAL !!!
+
+# single 
+
+currentDate <- Sys.Date()
+dir.create(paste0(path_out, crop, "/_outs/outs_", currentDate), showWarnings = FALSE) #showWarnings = FALSE -> folder is not overwritten, files copied into the firstly created one
+path_source <- paste0(path_epic,"EPIC_CS_4/EPIC0810/")
+Louts <- list.files(path_source, pattern = ".ACM|.ACY") # pattern either ACM or ACY (only AC was not enough because of WORKSPACE file)
+newDir <- paste0(path_out, crop, "/_outs/outs_", currentDate, "/")
+newDir2 <- paste0(path_out, crop, "/_outs/")
+file.copy(from = paste0(path_source, Louts),   # Output files backup in folder with date
+          to = paste0(newDir, Louts))
+file.copy(from = paste0(path_source, Louts),   # Latest ouptut files in '_outs' folder
+          to = paste0(newDir2, Louts), overwrite = TRUE)
+
+# remove files and paths
+
+rm(path_source)
+rm(path_temp)
+rm(Louts)
+rm(newDir)
+rm(newDir2)
+
+```
+
+## ACM HARVEST
+
+*Annual cropman file*
+
+Variable / Description / Units
+Y = Year
+RT# = Rotation number
+PRCP = Precipitation mm
+ET = Potential evapotranspiration mm
+ET = Evapotranspiration mm
+Q = Runoff mm
+SSF = Subsurface flow mm
+PRK = Percolation mm
+CVF = MUSLE crop cover factor
+MUSS = Water erosion T/ha
+YW = Wind erosion T/ha
+GMN = N mineralized kg/ha
+NMN = Humus mineralization kg/ha
+NFIX = Nitrogen fixation kg/ha
+NITR = Nitrification kg/ha
+AVOL = Nitrogen volatilization kg/ha
+DN = Denitrification kg/ha
+YON = Nitrogen loss with sediment kg/ha
+QNO3 = Nitrate loss in surface runoff kg/ha
+SSFN = Nitrogen in subsurface flow kg/ha
+PRKN = Nitrogen loss in percolate kg/ha
+MNP = Phosphorus mineralized kg/ha
+YP = Phosphorus loss in sediment kg/ha
+QAP = Labile phosphorus loss in runoff kg/ha
+PRKP = Phosphorus loss in percolate kg/ha
+LIME = Lime applied kg/ha
+OCPD = Organic carbon in plow layer depth set by PARM(16) kg/ha
+TOC = Organic carbon in soil profile kg/ha
+APBC = Labile phosphorus content in plow layer %
+TAP = Total labile p in soil profile kg/ha
+TNO3 = Total nitrate in soil profile kg/ha
+
+```{r ACM HARVEST, eval=FALSE}
+
+# load ACM files without 11 lines of header, combine into a single df
+
+acmnames <- list.files(paste0(path_out, crop, "/_outs/"), pattern= "\\.ACM$")  # Identify file names
+
+acm_comb = data.frame() # empty dataframe to write ACM files in
+
+for(i in acmnames) { # TAKES AGES !!
+  a <- read.table(paste0(path_out, crop, "/_outs/", i), header = FALSE, skip = 11)
+  a$source <- paste0(i)
+  a$source <- str_sub(a$source,1,nchar(a$source)-4)
+  df <- data.frame(a) 
+  acm_comb <- rbind(acm_comb, df)
+}
+
+# rename header
+
+col_names_acm <- c("YR",  "RT", "PRCP", "PET", "ET ", "Q", "SSF", "PRK", "CVF", "MUSS", "YW", "GMN", "NMN", "NFIX", "NITR", "AVOL",
+                   "DN", "YON", "QNO3", "SSFN", "PRKN", "MNP", "YP", "QAP", "PRKP", "LIME", "OCPD", "TOC", "APBC", "TAP", "TNO3", "runid")
+names(acm_comb) <- col_names_acm
+# names(acm) <- col_names_acm
+
+
+# *** WR *** WR *** WR ** WR ***
+currentDate <- Sys.Date()
+write.csv(acm_comb, file = paste0(path_out, crop, "/_outs/acm.csv"), row.names=FALSE)
+write.csv(acm_comb, file = paste0(path_out, crop, "/_outs/outs_", currentDate,"/",
+                                 currentDate, "_", crop, "_acm.csv"), row.names=FALSE)
+# *** WR *** WR *** WR ** WR ***
+
+```
+
+## ACY HARVEST
+
+*Annual Crop Yield*
+
+Variable / Description / Units
+Y = Year
+RT# = Fertilizer ID
+CPNM = Crop name
+YLDG = Grain yield T/ha
+YLDF = Forage yield T/ha
+BIOM Biomass T/ha
+YLN = Nitrogen used by crop kg/ha
+YLP = Phosphorus used by crop kg/ha
+FTN = Nitrogen applied kg/ha
+FTP = Phosphorus applied kg/ha
+IRGA = Irrigation volume applied mm
+IRDL = Irrigation water lost in delivery system mm
+WUEF = Water use efficiency (crop yield / growing season ET) kg/mm
+GSET = Growing season et (mm) mm
+CAW = Crop available water (soil water at planting + growing season rainfall - runoff) mm
+CRF = Growing season rainfall mm
+CQV = Growing season runoff mm
+COST = Cost of production $/ha
+COOP = Operating cost $/ha
+RYLG = Return for grain yield $/ha
+RYLF = Return for forage yield $/ha
+PSTF = Pest damage factor (fraction of yield remaining after pest damage
+WS = Water stress days d/yr
+NS = Nitrogen stress days d/yr
+PS = Phosphorus stress days d/yr
+KS = Potassium stress days d/yr
+TS = Temperature stress days d/yr
+AS = Aeration stress days d/yr
+SS = Salinity stress factor
+PPOP = Plant population plants/m2
+IPLD = Planting date
+IGMD = Germination date
+IHVD = Harvest date
+
+```{r ACY HARVEST, eval=F}
+
+# load ACY files without 11 lines of header and a single file
+
+acynames <- list.files(paste0(path_out, crop, "/_outs/"), pattern= "\\.ACY$")   # Identify file names
+
+acy_comb = data.frame() # empty dataframe to write ACM files in
+
+for(i in acynames) { # TAKES AGES !!
+  a <- read.table(paste0(path_out, crop, "/_outs/", i), header = FALSE, skip = 11)
+  a$source <- paste0(i)
+  a$source <- str_sub(a$source,1,nchar(a$source)-4)
+  df <- data.frame(a) 
+  acy_comb <- rbind(acy_comb, df)
+}
+
+# rename header
+
+col_names_acy <- c("YR",  "RT", "CPNM", "YLDG", "YLDF", "WCYD", "HI", "BIOM", "RW", 
+                   "YLN", "YLP", "YLC", "FTN", "FTP", "IRGA", "IRDL", "WUEF", "GSET", 
+                   "CAW", "CRF", "CQV", "COST", "COOP", "RYLG", "RYLF", "PSTF", 
+                   "WS", "NS", "PS", "KS", "TS", "AS", "SS", "PPOP", 
+                   "IPLD", "IGMD", "IHVD", "runid")
+names(acy_comb) <- col_names_acy
+names(acy) <- col_names_acy
+
+
+# *** WR *** WR *** WR ** WR ***
+currentDate <- Sys.Date()
+write.csv(acy_comb, file = paste0(path_out, crop, "/_outs/acy.csv"), row.names=FALSE)
+write.csv(acy_comb, file = paste0(path_out, crop, "/_outs/outs_", currentDate,"/",
+                                 currentDate, "_", crop, "_acy.csv"), row.names=FALSE)
+# *** WR *** WR *** WR ** WR ***
+
+
+rm(acm_comb)
+rm(acy_comb)
+```
+
+
+## OUTPUT TABLE
+
+ACM and ACY tables combined in one
+Contains all important outputs of the simulation
+
+```{r OUTPUT TABLE}
+
+# *** READ *** READ *** READ ** READ ***
+phu_cal <- read.table(paste0(path_out, crop, "/", crop, "_phu_cal.csv"), header = TRUE, sep = ";")
+# jul_cal <- read.table(paste0(path_tab, "jul_cal.csv"), header = TRUE, sep = ";")
+cultivars <- read.table(paste0(path_out, crop, "/", crop, "_cultivars.csv"), header = TRUE, sep = ";")
+
+# acm <- read.table(paste0(path_out, crop, "/_outs/acm.csv"), header = T, sep = ";")
+# acy <- read.table(paste0(path_out, crop, "/_outs/acy.csv"), header = T, sep = ";")
+
+# OR ?
+  
+if (seas == "SPG"){
+  acm <- read.table(paste0(path_out, crop, "//_outs/acm.csv"), header = T, sep = ",")
+  acy <- read.table(paste0(path_out, crop, "//_outs/acy.csv"), header = T, sep = ",")
+}  else if (seas == "WIN"){
+  acm <- read.table(paste0(path_out, crop, "//_outs/acm.csv"), header = T, sep = ",") %>%
+  filter(YR != 1989)
+  acy <- read.table(paste0(path_out, crop, "//_outs/acy.csv"), header = T, sep = ",") %>%
+  filter(IHVD != 0)
+} else {
+  print("ZEROO")
+}
+# *** READ *** READ *** READ ** READ ***
+
+
+# merge ACM and ACY; apply WCY parameter
+
+outtab0 <- merge(acm, acy) %>% 
+  filter(YR != 1989)
+outtab <- merge(outtab0, phu_cal, by.x = "runid", by.y = "runid") # join ACM and ACY with SCENARIO
+outtab$YLDG <- (outtab$YLDG*wcy) # WCY parameter / fraction water in yield 
+# outtab <- outtab %>%
+#   mutate(PO = case_when(KLIMREG == 0 ~ "K",
+#                         KLIMREG %in% c(1:3) ~ "R",
+#                         KLIMREG %in% c(4:5) ~ "C",
+#                         KLIMREG %in% c(6:7) ~ "B",
+#                         KLIMREG %in% c(8:9) ~ "H"))
+
+rm(acm)
+rm(acy)
+rm(phu_cal)
+rm(outtab0)
+
+
+# outtab == output tables; YLDG corrected with WCY parameter
+
+```
+
+
+\newpage 
+
+# CULTIVARS REVIEW
+
+## CULTIVARS
+
+```{r TABLE OF CULTIVARS, results='asis'}
+
+cultivars <- read.table(paste0(path_out, crop, "/", crop, "_cultivars.csv"), header = TRUE, sep = ";")
+   # cat('\n')
+   # cat("This is a heading for ", croplist[i] , "\n")
+   # kable(cultivars, caption = paste0("Cultivars of ", cropname))
+   # cat('\n')
+   tab <- kable(cultivars, caption = paste0("Cultivars of ", cropname))
+   print(tab)
+
+```
+
+## GRID 
+
+```{r PLOT GRIDS}
+gridmap <- st_read(paste0(path_shp, "EEA_CZSK_10km_n1427_5514.shp"), crs = 5514, quiet = T) # CZ i SK
+# gridmap <- st_read(paste0(path_shp, "10km_simu_5514.shp"), crs = 5514, quiet = T) # CZ
+plot(gridmap)
+```
+
+
+## MAP YIELD FOR ALL SCENARIOS
+
+```{r YIELD MAPS FOR SCENARIOS, results='asis'}
+
+out_scen <- outtab %>% 
+  select(runid, YR, scenario, GRID_NO, YLDG, PRCP, PET, TS) %>% 
+  group_by(runid) %>% 
+  summarise(runid, scenario, GRID_NO, avgYLD = mean(YLDG), avgPRCP = mean(PRCP), 
+            avgPET = mean(PET), avgTS = mean(TS)) %>% 
+  distinct()
+
+Lscen <- levels(as.factor(out_scen$scenario))
+# print(Lscen)
+
+if(crop == "BARL"){
+    yld_lim <- c(2,7)
+  } else if (crop == "CORN"){
+    yld_lim <- c(0,11) # adjust
+  } else if (crop == "WWHT"){
+    yld_lim <- c(3,9)
+  } else {
+    print("ZEROO")
+}
+
+# for(i in 1:length(Lscen)) {  
+for(i in Lscen) {  
+  # pick_scen <- read.table(paste0(path_out, crop, "/", crop, "_selectedScen.csv"), header = T, sep = ";")
+  scene <- i
+  filt_scen <- filter(out_scen, scenario == scene)
+  mout <-sp::merge(filt_scen, gridmap, by.x = "GRID_NO", by.y = "GRID", all.x = T)
+  ggp_yld <- ggplot(mout, aes(geometry = geometry, fill= avgYLD))+
+    geom_sf()+
+    ggtitle(paste0("Average yield of ", cropname, " in 1989-2019 / scenario: ", scene )) + 
+    scale_fill_gradient("[t/ha]", 
+    low = "yellow",
+    high = "darkgreen",
+    space = "Lab",
+    na.value = "grey50",
+    guide = "colourbar",
+    aesthetics = "fill", 
+    limits = yld_lim)+ 
+    coord_sf()+
+    theme_void()+
+    theme(axis.ticks.x = element_blank(), axis.text.x = element_blank(), 
+        axis.ticks.y = element_blank(), axis.text.y = element_blank(),
+        plot.title = element_text(hjust = 0.5))
+  print(ggp_yld)
+}
+
+```
+
+## DESCRIPTIVE STATISTICS
+
+descriptive statistics for each grid
+calculated from all `r nrow(cultivars)` cultivars
+
+```{r CROP YIELD STATS MAP}
+destat <- outtab %>% 
+select(runid, YR, scenario, GRID_NO, YLDG) %>% 
+  group_by(GRID_NO) %>% 
+  summarise(GRID_NO, minYLD = min(YLDG), maxYLD = max(YLDG),
+            avgYLD = mean(YLDG), sdYLD = sd(YLDG)) %>% 
+  mutate(ranYLD = maxYLD-minYLD) %>% 
+  distinct()
+
+# gridmap <- st_read(paste0(path_shp, "10km_simu_5514.shp"), crs = 5514, quiet = T)
+
+desshp <-sp::merge(destat, gridmap, by.x = "GRID_NO", by.y = "GRID")
+
+# mean
+
+ggplot(desshp, aes(geometry = geometry, fill= avgYLD))+
+  geom_sf()+
+  ggtitle(paste0("Mean simulated yield")) + 
+  scale_fill_gradient("[t/ha]", 
+                      low = "yellow",
+                     high = "darkgreen",
+                      space = "Lab",
+                      na.value = "grey50",
+                      guide = "colourbar",
+                      aesthetics = "fill")+
+                      # limits = c(4.7,7.1))+
+  coord_sf()+
+  theme_void()+
+  theme(axis.ticks.x = element_blank(), axis.text.x = element_blank(), 
+        axis.ticks.y = element_blank(), axis.text.y = element_blank(),
+        plot.title = element_text(hjust = 0.5))
+
+# range
+
+ggplot(desshp, aes(geometry = geometry, fill= ranYLD))+
+  geom_sf()+
+  ggtitle(paste0("Range of simulated yield")) + 
+  scale_fill_gradient("[t/ha]", 
+                      low = "lightblue",
+                      high = "darkgreen",
+                      space = "Lab",
+                      na.value = "grey50",
+                      guide = "colourbar",
+                      aesthetics = "fill")+
+                      # limits = c(4.7,7.1))+
+  coord_sf()+
+  theme_void()+
+  theme(axis.ticks.x = element_blank(), axis.text.x = element_blank(), 
+        axis.ticks.y = element_blank(), axis.text.y = element_blank(),
+        plot.title = element_text(hjust = 0.5))
+
+# sd
+
+ggplot(desshp, aes(geometry = geometry, fill= sdYLD))+
+  geom_sf()+
+  ggtitle(paste0("Standard deviation of simulated yield")) + 
+  scale_fill_gradient("[t/ha]", 
+                      low = "lightblue",
+                      high = "red",
+                      space = "Lab",
+                      na.value = "grey50",
+                      guide = "colourbar",
+                      aesthetics = "fill")+
+                      # limits = c(4.7,7.1))+
+  coord_sf()+
+  theme_void()+
+  theme(axis.ticks.x = element_blank(), axis.text.x = element_blank(), 
+        axis.ticks.y = element_blank(), axis.text.y = element_blank(),
+        plot.title = element_text(hjust = 0.5))
+
+```
+
+\newpage 
+
+# PLANTING, GERMINATION AND HARVEST DATE SHIFTS
+
+criteria: 
+
+* given IPLD and IPLD shift (0-2; 3-10; >10)
+
+* IPLD and IGMD shift (0-5; 5-10; >10)
+
+* given IHVD and IHVD shift (0-7; 7-14; >14)
+
+working DF: **shifts**
+
+working DF: **avg_shifts**
+
+
+```{r PREPARING DF WITH CALCULATED DATE SHIFTS, message=FALSE}
+
+# merge output table with designed cultivar
+
+outtab <- if(crop == "WWHT"){
+  filter(outtab, IHVD != 0)
+} else {outtab <- outtab}
+
+
+shifts <- outtab %>% 
+  select(runid, YR, scenario, GRID_NO, YLDG, IPLD, IGMD, IHVD) %>% 
+  merge(cultivars, by.x = "scenario", by.y = "runid") %>% 
+  mutate(gIPLD = paste0(YR, sprintf("%02d", PLN_MON), sprintf("%02d", PLN_DAY))) %>% # given IPLD
+  mutate(gIHVD = paste0(YR, sprintf("%02d", HRV_MON), sprintf("%02d", HRV_DAY))) # given IHVD
+  
+
+# formatting date
+
+shifts$IPLD <- as.Date(as.character(shifts$IPLD), format = "%Y%m%d")
+shifts$gIPLD <- as.Date(shifts$gIPLD, format = "%Y%m%d")
+
+shifts$IGMD <- as.Date(as.character(shifts$IGMD), format = "%Y%m%d")
+
+shifts$IHVD <- as.Date(as.character(shifts$IHVD), format = "%Y%m%d")
+shifts$gIHVD <- as.Date(shifts$gIHVD, format = "%Y%m%d")
+
+
+# differences 
+
+shifts$shft_IPLD <- as.numeric(difftime(shifts$gIPLD, shifts$IPLD, units = "days"))
+shifts$shft_IGMD <- as.numeric(difftime(shifts$IGMD, shifts$IPLD, units = "days"))
+shifts$shft_IHVD <- as.numeric(difftime(shifts$gIHVD, shifts$IHVD, units = "days"))
+
+if(seas == "WIN"){
+  shifts$shft_IPLD <- case_when(shifts$shft_IPLD >= 365 ~ 0,
+                                shifts$shft_IPLD != 365 ~ shifts$shft_IPLD)
+} else {
+  shifts$shft_IPLD <- shifts$shft_IPLD
+}
+
+# avg date shift for scenario
+
+avg_shifts <- shifts %>% 
+  group_by(runid) %>%
+  summarise(runid, scenario, GRID_NO, avgYLD = mean(YLDG), avgPshft = mean(shft_IPLD), avgGshft = mean(shft_IGMD), 
+            avgHshft = mean(shft_IHVD)) %>% # avgPRCP = mean(PRCP), avgPET = mean(PET), avgTS = mean(TS)
+  distinct()
+```
+
+## IPLD
+
+```{r IPLD SHIFT MAP}
+
+if(crop == "BARL"){
+    ipld_lim <- c(-30,30) # adjust
+  } else if (crop == "CORN"){
+    ipld_lim <- c(-60,30) 
+  } else if (crop == "WWHT"){
+    ipld_lim <- c(-10,10)
+  } else {
+    print("ZEROO")
+}
+
+for(i in 1:length(Lscen)) {  
+  # pick_scen <- read.table(paste0(path_out, crop, "/", crop, "_selectedScen.csv"), header = T, sep = ";")
+  scene <- Lscen[i]
+  filt_scen <- filter(avg_shifts, scenario == scene)
+  # gridmap <- st_read(paste0(path_shp, "10km_simu_5514.shp"), crs = 5514, quiet = T) # CZ
+  gridmap <- st_read(paste0(path_shp, "EEA_CZSK_10km_n1427_5514.shp"), crs = 5514, quiet = T) # CZ i SK
+  mout <-sp::merge(filt_scen, gridmap, by.x = "GRID_NO", by.y = "GRID")
+  ggp_IPLD <- ggplot(mout, aes(geometry = geometry, fill= avgPshft))+
+    geom_sf()+
+    ggtitle(paste0("Average shift of given IPLD and actual IPLD for ", cropname, " / scenario: ", scene)) + 
+    scale_fill_gradient2("[days]", 
+    low = "red",
+    mid = "green",
+    high = "blue",
+    space = "Lab",
+    na.value = "grey50",
+    guide = "colourbar",
+    aesthetics = "fill",
+    limits = ipld_lim)+
+    coord_sf()+
+    theme_void()+
+    theme(axis.ticks.x = element_blank(), axis.text.x = element_blank(), 
+        axis.ticks.y = element_blank(), axis.text.y = element_blank(),
+        plot.title = element_text(hjust = 0.5))
+  print(ggp_IPLD)
+}
+```
+
+## IGMD
+
+
+```{r IGMD SHIFT MAP}
+
+if(crop == "BARL"){
+    igmd_lim <- c(-30,30) 
+  } else if (crop == "CORN"){
+    igmd_lim <- c(-60,30) # adjust
+  } else if (crop == "WWHT"){
+    igmd_lim <- c(-30,30)
+  } else {
+    print("ZEROO")
+}
+
+for(i in 1:length(Lscen)) {  
+  # pick_scen <- read.table(paste0(path_out, crop, "/", crop, "_selectedScen.csv"), header = T, sep = ";")
+  scene <- Lscen[i]
+  filt_scen <- filter(avg_shifts, scenario == scene)
+  # gridmap <- st_read(paste0(path_shp, "10km_simu_5514.shp"), crs = 5514, quiet = T) # CZ
+  gridmap <- st_read(paste0(path_shp, "EEA_CZSK_10km_n1427_5514.shp"), crs = 5514, quiet = T) # CZ i SK
+  mout <-sp::merge(filt_scen, gridmap, by.x = "GRID_NO", by.y = "GRID")
+  ggp_IGMD <- ggplot(mout, aes(geometry = geometry, fill= avgGshft))+
+    geom_sf()+
+    ggtitle(paste0("Average shift of IGMD from IPLD for ", cropname, " / scenario: ", scene )) + 
+    scale_fill_gradient2("[days]", 
+    low = "red",
+    mid = "green",
+    high = "blue",
+    space = "Lab",
+    na.value = "grey50",
+    guide = "colourbar",
+    aesthetics = "fill",
+    limits = igmd_lim)+
+    coord_sf()+
+    theme_void()+
+    theme(axis.ticks.x = element_blank(), axis.text.x = element_blank(), 
+        axis.ticks.y = element_blank(), axis.text.y = element_blank(),
+        plot.title = element_text(hjust = 0.5))
+  print(ggp_IGMD)
+}
+```
+
+## IHVD
+
+```{r IHVD SHIFT MAP}
+
+if(crop == "BARL"){
+    ihvd_lim <- c(-30,30) # adjust
+  } else if (crop == "CORN"){
+    ihvd_lim <- c(-100,10) 
+  } else if (crop == "WWHT"){
+    ihvd_lim <- c(-5,5)
+  } else {
+    print("ZEROO")
+}
+
+for(i in 1:length(Lscen)) {  
+  # pick_scen <- read.table(paste0(path_out, crop, "/", crop, "_selectedScen.csv"), header = T, sep = ";")
+  scene <- Lscen[i]
+  filt_scen <- filter(avg_shifts, scenario == scene)
+  # gridmap <- st_read(paste0(path_shp, "10km_simu_5514.shp"), crs = 5514, quiet = T) # CZ
+  gridmap <- st_read(paste0(path_shp, "EEA_CZSK_10km_n1427_5514.shp"), crs = 5514, quiet = T) # CZ i SK
+  mout <-sp::merge(filt_scen, gridmap, by.x = "GRID_NO", by.y = "GRID")
+  ggp_IGMD <- ggplot(mout, aes(geometry = geometry, fill= avgHshft))+
+    geom_sf()+
+    ggtitle(paste0("Average shift of given IHVD and actual IHVD for ", cropname, " / scenario: ", scene )) + 
+    scale_fill_gradient2("[days]", 
+    low = "red",
+    mid = "green",
+    high = "blue",
+    space = "Lab",
+    na.value = "grey50",
+    guide = "colourbar",
+    aesthetics = "fill",
+    limits = ihvd_lim)+ 
+    coord_sf()+
+    theme_void()+
+    theme(axis.ticks.x = element_blank(), axis.text.x = element_blank(), 
+        axis.ticks.y = element_blank(), axis.text.y = element_blank(),
+        plot.title = element_text(hjust = 0.5))
+  print(ggp_IGMD)
+}
+```
+
+\newpage
+
+# SELECTING SCENARIO
+
+## BASED ON IPLD
+
+```{r SCENARIO BASED ON IPLD TAB}
+
+selIPLD <- avg_shifts %>% 
+  group_by(GRID_NO) %>%
+  # filter(H == min(H)) %>% 
+  # filter(P == min(P)) 
+  # filter(HPsum == min(HPsum)) 
+  slice(which.min(abs(avgPshft)))
+ 
+selIPLD$scenario <- as.factor(selIPLD$scenario)
+summary(selIPLD$scenario)
+
+
+cultivars <- read.table(paste0(path_out, crop, "/", crop, "_cultivars.csv"), header = TRUE, sep = ";") 
+   
+sel_scen <- selIPLD$scenario
+
+IPLD_sel <- cultivars %>% 
+  filter(runid %in% sel_scen)
+tab <- kable(IPLD_sel, caption = paste0("Selected cultivars of ", cropname, " based on IPLD"))
+print(tab)
+```
+
+
+```{r SCENARIO BASED ON IPLD MAP}
+
+# gridmap <- st_read(paste0(path_shp, "10km_simu_5514.shp"), crs = 5514, quiet = T) # CZ
+gridmap <- st_read(paste0(path_shp, "EEA_CZSK_10km_n1427_5514.shp"), crs = 5514, quiet = T) # CZ i SK
+mout <-sp::merge(selIPLD, gridmap, by.x = "GRID_NO", by.y = "GRID")
+
+# yield
+
+ggp_yld <- ggplot(mout, aes(geometry = geometry, fill= avgYLD))+
+  geom_sf()+
+  ggtitle(paste0("Average yield of ", cropname, " in 1989-2019")) + 
+  scale_fill_gradient("[t/ha]", 
+                      low = "yellow",
+                      high = "darkgreen",
+                      space = "Lab",
+                      na.value = "grey50",
+                      guide = "colourbar",
+                      aesthetics = "fill")+
+                      # limits = c(4.7,7.1))+
+  coord_sf()+
+  theme_void()+
+  theme(axis.ticks.x = element_blank(), axis.text.x = element_blank(), 
+        axis.ticks.y = element_blank(), axis.text.y = element_blank(),
+        plot.title = element_text(hjust = 0.5))
+print(ggp_yld)
+
+# scenarios
+
+ggp_scen <- ggplot(mout, aes(geometry = geometry, fill= scenario))+
+  geom_sf()+
+  ggtitle(paste0("Selected planting scenarios for ", cropname, " based on IPLD")) + 
+  # scale_fill_gradient("[t/ha]", 
+  #                     low = "yellow",
+  #                     high = "darkgreen",
+  #                     space = "Lab",
+  #                     na.value = "grey50",
+  #                     guide = "colourbar",
+  #                     aesthetics = "fill")+
+  #                     # limits = c(4.7,7.1))+
+  coord_sf()+
+  theme_void()+
+  theme(axis.ticks.x = element_blank(), axis.text.x = element_blank(), 
+        axis.ticks.y = element_blank(), axis.text.y = element_blank(),
+        plot.title = element_text(hjust = 0.5))
+print(ggp_scen)
+
+```
+
+## BASED ON IGMD
+
+```{r SCENARIO BASED ON IGMD TAB}
+
+selIGMD <- avg_shifts %>% 
+  group_by(GRID_NO) %>%
+  # filter(H == min(H)) %>% 
+  # filter(P == min(P)) 
+  # filter(HPsum == min(HPsum)) 
+  slice(which.min(abs(avgGshft)))
+ 
+
+selIGMD$scenario <- as.factor(selIGMD$scenario)
+summary(selIGMD$scenario)
+
+
+cultivars <- read.table(paste0(path_out, crop, "/", crop, "_cultivars.csv"), header = TRUE, sep = ";") 
+   
+sel_scen <- selIGMD$scenario
+
+IGMD_sel <- cultivars %>% 
+  filter(runid %in% sel_scen)
+tab <- kable(IGMD_sel, caption = paste0("Selected cultivars of ", cropname, " based on IGMD"))
+print(tab)
+```
+
+```{r SCENARIO BASED ON IGMD MAP}
+# gridmap <- st_read(paste0(path_shp, "10km_simu_5514.shp"), crs = 5514, quiet = T) # CZ
+gridmap <- st_read(paste0(path_shp, "EEA_CZSK_10km_n1427_5514.shp"), crs = 5514, quiet = T) # CZ i SK
+mout <-sp::merge(selIGMD, gridmap, by.x = "GRID_NO", by.y = "GRID")
+
+# yield
+
+ggp_yld <- ggplot(mout, aes(geometry = geometry, fill= avgYLD))+
+  geom_sf()+
+  ggtitle(paste0("Average yield of ", cropname, " in 1989-2019")) + 
+  scale_fill_gradient("[t/ha]", 
+                      low = "yellow",
+                      high = "darkgreen",
+                      space = "Lab",
+                      na.value = "grey50",
+                      guide = "colourbar",
+                      aesthetics = "fill")+
+                      # limits = c(4.7,7.1))+
+  coord_sf()+
+  theme_void()+
+  theme(axis.ticks.x = element_blank(), axis.text.x = element_blank(), 
+        axis.ticks.y = element_blank(), axis.text.y = element_blank(),
+        plot.title = element_text(hjust = 0.5))
+print(ggp_yld)
+
+# scenarios
+
+ggp_scen <- ggplot(mout, aes(geometry = geometry, fill= scenario))+
+  geom_sf()+
+  ggtitle(paste0("Selected planting scenarios for ", cropname, " based on IGMD")) + 
+  # scale_fill_gradient("[t/ha]", 
+  #                     low = "yellow",
+  #                     high = "darkgreen",
+  #                     space = "Lab",
+  #                     na.value = "grey50",
+  #                     guide = "colourbar",
+  #                     aesthetics = "fill")+
+  #                     # limits = c(4.7,7.1))+
+  coord_sf()+
+  theme_void()+
+  theme(axis.ticks.x = element_blank(), axis.text.x = element_blank(), 
+        axis.ticks.y = element_blank(), axis.text.y = element_blank(),
+        plot.title = element_text(hjust = 0.5))
+print(ggp_scen)
+```
+
+## BASED ON IHVD
+
+```{r SCENARIO BASED ON IHVD TAB}
+
+selIHVD <- avg_shifts %>% 
+  group_by(GRID_NO) %>%
+  # filter(H == min(H)) %>% 
+  # filter(P == min(P)) 
+  # filter(HPsum == min(HPsum)) 
+  slice(which.min(abs(avgHshft)))
+ 
+
+selIHVD$scenario <- as.factor(selIHVD$scenario)
+summary(selIHVD$scenario)
+
+
+cultivars <- read.table(paste0(path_out, crop, "/", crop, "_cultivars.csv"), header = TRUE, sep = ";") 
+   
+sel_scen <- selIHVD$scenario
+
+IHVD_sel <- cultivars %>% 
+  filter(runid %in% sel_scen)
+tab <- kable(IHVD_sel, caption = paste0("Selected cultivars of ", cropname, " based on IHVD"))
+print(tab)
+```
+
+```{r SCENARIO BASED ON IHVD MAP}
+# gridmap <- st_read(paste0(path_shp, "10km_simu_5514.shp"), crs = 5514, quiet = T) # CZ
+gridmap <- st_read(paste0(path_shp, "EEA_CZSK_10km_n1427_5514.shp"), crs = 5514, quiet = T) # CZ i SK
+mout <-sp::merge(selIHVD, gridmap, by.x = "GRID_NO", by.y = "GRID")
+
+# yield
+
+ggp_yld <- ggplot(mout, aes(geometry = geometry, fill= avgYLD))+
+  geom_sf()+
+  ggtitle(paste0("Average yield of ", cropname, " in 1989-2019")) + 
+  scale_fill_gradient("[t/ha]", 
+                      low = "yellow",
+                      high = "darkgreen",
+                      space = "Lab",
+                      na.value = "grey50",
+                      guide = "colourbar",
+                      aesthetics = "fill")+
+                      # limits = c(4.7,7.1))+
+  coord_sf()+
+  theme_void()+
+  theme(axis.ticks.x = element_blank(), axis.text.x = element_blank(), 
+        axis.ticks.y = element_blank(), axis.text.y = element_blank(),
+        plot.title = element_text(hjust = 0.5))
+print(ggp_yld)
+
+# scenarios
+
+ggp_scen <- ggplot(mout, aes(geometry = geometry, fill= scenario))+
+  geom_sf()+
+  ggtitle(paste0("Selected planting scenarios for ", cropname, " based on IHVD")) + 
+  # scale_fill_gradient("[t/ha]", 
+  #                     low = "yellow",
+  #                     high = "darkgreen",
+  #                     space = "Lab",
+  #                     na.value = "grey50",
+  #                     guide = "colourbar",
+  #                     aesthetics = "fill")+
+  #                     # limits = c(4.7,7.1))+
+  coord_sf()+
+  theme_void()+
+  theme(axis.ticks.x = element_blank(), axis.text.x = element_blank(), 
+        axis.ticks.y = element_blank(), axis.text.y = element_blank(),
+        plot.title = element_text(hjust = 0.5))
+print(ggp_scen)
+```
+
+
+
+```{r RENDER, eval=F}
+
+# install.packages("rmarkdown")
+# library(rmarkdown)
+# rmarkdown::render(input = "EPIC_hrvCult.Rmd", 
+#        output_format = "pdf_document",
+#        output_file = paste0("c:/Users/krizovak/Documents/__EPIC__/R/markdown/reports/", crop, "_hrvCultReport.pdf"))
+
+```
+

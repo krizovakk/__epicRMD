@@ -17,8 +17,13 @@ knitr::opts_chunk$set(echo = F, message=FALSE, fig.dim = c(8, 4))
 # install.packages("gdata")
 require(tidyverse)
 require(gdata) # write.fwf
+library(sf)
+library(sp)
+library(rgdal)
 
 ```
+
+\newpage
 
 # INITIAL SETUP
 
@@ -30,6 +35,7 @@ path_in <- "c:/Users/krizovak/Documents/__EPIC__/R/"
 path_met <- "C:/Users/krizovak/Documents/__EPIC__/R/_tables/v3_czsk/" 
 path_tab <- "c:/Users/krizovak/Documents/__EPIC__/R/_tables/" 
 path_shp <- "c:/Users/krizovak/Documents/__EPIC__/R/_shapefiles/" 
+path_epic <- "c:/Users/krizovak/Documents/__EPIC__/EPIC_CS_v4_Aug2022/" 
 
 path_out <- "c:/Users/krizovak/Documents/__EPIC__/R/_cultivarRESULTS/" 
 ```
@@ -46,7 +52,7 @@ period <- 1989:2019
 ```{r}
 
 # crop <- "ALFA"
-# crop <- "BARL"
+crop <- "BARL"
 # crop <- "CSIL"
 # crop <- "CORN"
 # crop <- "OATS"
@@ -57,7 +63,7 @@ period <- 1989:2019
 # crop <- "SGBT"
 # crop <- "SUNF"
 # crop <- "SOYB"
-crop <- "WWHT"
+# crop <- "WWHT"
 
 # crop ID + seasonality
 
@@ -151,6 +157,25 @@ if(crop == "ALFA"){
 
 * optimal temperature: `r top`
 
+## geospatial backgroud
+
+10 km grids
+
+* 877 for CZ
+* 550 for SK
+
+```{r}
+czsk_shp <- st_read(paste0(path_shp, "CS_CGMS10k_SpatRef_v0.shp"), quiet = T) # CZ i SK crs = 5514, 
+plot(czsk_shp)
+
+czsk_tab <- read.table(paste0(path_tab, "CS_GRID_OKRES_VO_parallelFolder.csv"), header = TRUE, sep = ";")
+czsk_tab$CGMS_ID <- as.character(czsk_tab$CGMS_ID)
+czsk_tab$CGMS_ID <- as.factor(czsk_tab$CGMS_ID)
+print(czsk_tab[duplicated(czsk_tab$CGMS_ID),])
+
+```
+
+
 # CROP CALENDAR
 
 *`r crop`_crop_cal*
@@ -165,7 +190,7 @@ file necessary for:
 
 * ?
 
-```{r}
+```{r CROP CALENDAR}
 
 # *** READ *** READ *** READ ** READ ***
 cultivars <- read.table(paste0(path_out, crop, "/", crop, "_cultivars.csv"), header = TRUE, sep = ";")
@@ -195,46 +220,34 @@ calculates optimal PHU (potential heat units) for each cultivar
 required parameters: **tbs** and **top**
 
 
-```{r}
+```{r PHU FROM DLY, message=F}
 
 # eval=FALSE
+# requiered only if cultivars were changed !!
 
-# czsk dly
+# czsk dly list
 
-# *** READ *** READ *** READ ** READ ***
-wsnames <- list.files(path_met, pattern="*.dly")  # Identify file names # all dly files in weather folder
-czsk_grid <- read.table(paste0(path_tab, "czsk_GRID.csv"), header = TRUE, sep = ",") %>% 
-  mutate(dly = paste0(GRID, ".dly")) # selected grids for CZSK without overlaps, n=1427
-# *** READ *** READ *** READ ** READ ***
-
-df <- as.data.frame(wsnames)
-czsk_merge <- merge(czsk_grid, df, by.x = "dly", by.y = "wsnames", all = T) 
-getrid <- czsk_merge %>% 
-  filter(is.na(GRID))
-chosen <- merge(czsk_grid, df, by.x = "dly", by.y = "wsnames")
-chosen_dly <- merge(czsk_grid, df, by.x = "dly", by.y = "wsnames") %>% 
-  select(dly)
-
-chosen_vec <- as.vector(chosen_dly) %>% 
-  unlist(use.names=FALSE)
+czsk_grid <- czsk_tab %>% 
+  mutate(dly = paste0(CGMS_ID, ".dly")) # selected grids for CZSK without overlaps, n=1427
+Ldly <- czsk_grid$dly
 
 # batch processing dly
 
 # wsnames <- list.files(path_met, pattern="*.dly")  # Identify file names
 a_cols <- c("year", "month", "day", "srad", "tmax", "tmin", "prcp", "rhum", "wind")
+file.create(paste0(path_out, crop, "/", crop, "_phuSUM.csv"))
+phufile <- paste0(path_out, crop, "/", crop, "_phuSUM.csv")
 
-for(i in 1:length(chosen_vec)) {  # FUNKCNI; 'chosen_vec' = CZSK × 'wsnames' = CZ
-  a <- read.table(paste0(path_met, chosen_vec[i])) # reads the DLY file
+for(i in Ldly) {  # FUNKCNI; 'Ldly' = CZSK × 'wsnames' = CZ
+  a <- read.table(paste0(path_met, i)) # reads the DLY file
   names(a) <- a_cols  # rename the columns
   a$month <- sprintf("%02d", as.numeric(a$month)) # month in format 01
   a$day <- sprintf("%02d", as.numeric(a$day)) # day in format 01
   a$datefull <- paste(a$year, a$month, a$day, sep = "-")
   a$datefull <- as.Date(a$datefull, format=c("%Y-%m-%d")) # creates full date
-  # a$datefull <- format(a$datefull, format= "%Y-%m-%d")
-  # ab <- a %>% filter(year %in% c(1995:2017)) %>% 
-  ab <- a %>% filter(year %in% period) %>% # zkousim zadavani time period externe, kdyztak zadat rucne
+  ab <- a %>% filter(year %in% period) %>%
     mutate(tavg = (tmax+tmin)/2) %>% # average temperature required for PHU calculation
-    group_by(year) %>%  # https://stackoverflow.com/questions/12925063/numbering-rows-within-groups-in-a-data-frame
+    group_by(year) %>%
     mutate(julday = seq_along(prcp)) %>%
     mutate(phu = case_when(tavg <= tbs ~ 0,
                            (tavg > tbs)&(tavg < top) ~ tavg,
@@ -248,36 +261,72 @@ for(i in 1:length(chosen_vec)) {  # FUNKCNI; 'chosen_vec' = CZSK × 'wsnames' = 
   ae <- merge(cultivars, ad, by.x = "HRV_JUL", by.y = "Group.1") # adds phusum value into cultivars list
   af <- ae[, c("runid","PLN_JUL","HRV_JUL","LVP","sow_dat","PLN_MON","PLN_DAY",
                "hrv_dat","HRV_MON","HRV_DAY","phusum")] # reorganize the column order
-  af$source <- paste0(chosen_vec[i]) # adds column with the DLY name
-  dir.create (paste0(path_out, crop, "/phusum"), showWarnings = FALSE) # show warnings F -> folder exists, but it does not interfere with the following outcomes (https://stackoverflow.com/questions/4216753/check-existence-of-directory-and-create-if-doesnt-exist)
-  write.table(af, file = paste0(path_out, crop, "/phusum/", chosen_vec[i], ".csv"), sep = ",", row.names = F)
-} 
+  af$source <- paste0(i) # adds column with the DLY name
+  write.table(af, file = paste(phufile), sep = ";",
+              append=T, quote = F, col.names = F, row.names = F) 
+  # i<-i+1
+  # print(i)
+}
 
-rm(a)
-rm(ab)
-rm(ac)
-rm(ad)
-rm(ae)
-rm(af)
-# rm(cultivars)
+# old way
 
-# combine phu files
-
-# *** READ *** READ *** READ ** READ ***
-phusumA <- list.files(path = paste0(path_out, crop, "/phusum/"),  # Identify all CSV files
-                   pattern = "*.csv", full.names = TRUE) %>%
-  lapply(read_csv) %>%                              # Store all files in list
-  bind_rows                                         # Combine data sets into one data set
-# *** READ *** READ *** READ ** READ ***
-
-
-phusumA$phusum <- round((phusumA$phusum-(phusumA$phusum*0.1)), digits = 2)# lower the avg PHU by 10 %, rounds on 2 decimals
-phusumA$source <- str_sub(phusumA$source,1,nchar(phusumA$source)-4)
-
-
-# *** WR *** WR *** WR ** WR ***
-write.table(phusumA, file = paste0(path_out, crop, "/", crop, "_phusumA.csv"), row.names=FALSE, sep = ";")
-# *** WR *** WR *** WR ** WR ***
+# for(i in 1:length(Ldly)) {  # FUNKCNI; 'Ldly' = CZSK × 'wsnames' = CZ
+#   a <- read.table(paste0(path_met, Ldly[i])) # reads the DLY file
+#   names(a) <- a_cols  # rename the columns
+#   a$month <- sprintf("%02d", as.numeric(a$month)) # month in format 01
+#   a$day <- sprintf("%02d", as.numeric(a$day)) # day in format 01
+#   a$datefull <- paste(a$year, a$month, a$day, sep = "-")
+#   a$datefull <- as.Date(a$datefull, format=c("%Y-%m-%d")) # creates full date
+#   ab <- a %>% filter(year %in% period) %>%
+#     mutate(tavg = (tmax+tmin)/2) %>% # average temperature required for PHU calculation
+#     group_by(year) %>%  
+#     mutate(julday = seq_along(prcp)) %>%
+#     mutate(phu = case_when(tavg <= tbs ~ 0,
+#                            (tavg > tbs)&(tavg < top) ~ tavg,
+#                            tavg >= top ~ top)) %>%
+#     mutate(phusum = cumsum(phu))
+#   ac <- ab %>%
+#     filter(julday %in% crop_cal$HRV_JUL) %>%
+#     group_by(julday)
+#   ac$julday <- as.factor(ac$julday)
+#   ad <- aggregate(ac[, 14], list(ac$julday), mean) # aggregates collumn 14 (==phusum) and calculates mean value for every julday
+#   ae <- merge(cultivars, ad, by.x = "HRV_JUL", by.y = "Group.1") # adds phusum value into cultivars list
+#   af <- ae[, c("runid","PLN_JUL","HRV_JUL","LVP","sow_dat","PLN_MON","PLN_DAY",
+#                "hrv_dat","HRV_MON","HRV_DAY","phusum")] # reorganize the column order
+#   af$source <- paste0(Ldly[i]) # adds column with the DLY name
+#   dir.create (paste0(path_out, crop, "/phusum"), showWarnings = FALSE) # show warnings F -> folder exists, but it does not interfere with the following outcomes (https://stackoverflow.com/questions/4216753/check-existence-of-directory-and-create-if-doesnt-exist)
+#   write.table(af, file = paste0(path_out, crop, "/phusum/", Ldly[i], ".csv"), sep = ",", row.names = F)
+#   # i<-i+1
+#   # print(i)
+# } 
+# 
+# rm(a)
+# rm(ab)
+# rm(ac)
+# rm(ad)
+# rm(ae)
+# rm(af)
+# # rm(cultivars)
+# 
+# # combine phu files
+# 
+# # *** READ *** READ *** READ ** READ ***
+# phu_sum <- list.files(path = paste0(path_out, crop, "/phusum/"),  # Identify all CSV files
+#                    pattern = "*.csv", full.names = TRUE) %>%
+#   lapply(read_csv) %>%                              # Store all files in list
+#   bind_rows                                         # Combine data sets into one data set
+# # *** READ *** READ *** READ ** READ ***
+# 
+# 
+# phu_sum$phusum <- round((phu_sum$phusum-(phu_sum$phusum*0.1)), digits = 2)# lower the avg PHU by 10 %, rounds on 2 decimals
+# phu_sum$source <- str_sub(phu_sum$source,1,nchar(phu_sum$source)-4)
+# 
+# # phu_cs <- merge(czsk_tab, phu_sum, by.x = "CGMS_ID", by.y = "source") # IMPORTANT !! Filters only GRIDS in final CZSK table
+# 
+# 
+# # *** WR *** WR *** WR ** WR ***
+# write.table(phu_sum, file = paste0(path_out, crop, "/", crop, "_phuSUM.csv"), row.names=FALSE, sep = ";")
+# # *** WR *** WR *** WR ** WR ***
 
 ```
 
@@ -288,61 +337,350 @@ write.table(phusumA, file = paste0(path_out, crop, "/", crop, "_phusumA.csv"), r
 ```{r}
 
 # *** READ *** READ *** READ ** READ ***
-# eea10_simu <- read.table(paste0(path_tab, "10km_SimU_n891.csv"), header = TRUE, sep = ",")  
-phusumA <- read.table(paste0(path_out, crop, "/", crop, "_phusumA.csv"), header = TRUE, sep = ";")
+phu_sum <- read.table(paste0(path_out, crop, "/", crop, "_phuSUM.csv"), header = F, sep = ";")
 # *** READ *** READ *** READ ** READ **
 
-# phu_cal0 <- merge(eea10_simu, phusumA, by.x = "GRID_NO", by.y = "source", all.y = T) # 1427 grid * 15 cultivars (BARL) = 21405
+phu_colnam <- c("runid","PLN_JUL","HRV_JUL","LVP","sow_dat","PLN_MON","PLN_DAY",
+               "hrv_dat","HRV_MON","HRV_DAY","phusum", "source")
+names(phu_sum) <- phu_colnam
+phu_sum$source <- as.numeric(str_sub(phu_sum$source,1,nchar(phu_sum$source)-4))
 
-phu_cal1 <- phusumA %>% 
+phu_cal <- phu_sum %>% 
   mutate(CROPID = cropid) %>% 
   mutate(CROP = crop) %>% 
   rename("PHU" = phusum) %>% 
   rename("scenario" = runid) %>% 
   rename("GRID_NO" = source) %>% 
-  # select(SimUID, scenario, GRID_NO, KLIMREG, CROPID, CROP, PLN_JUL, HRV_JUL, LVP, PHU) %>% 
   select(scenario, GRID_NO, CROPID, CROP, PLN_JUL, HRV_JUL, LVP, PHU) %>% 
-  group_by(GRID_NO, scenario) %>% 
-  dplyr::mutate(runid = cur_group_id()) %>% 
-  mutate(cntry = case_when(GRID_NO %in% 1:891 ~ "CZ",
-                           GRID_NO %in% 1000:6000 ~ "SK"))
+  arrange(GRID_NO, scenario) %>% 
+  dplyr::mutate(runid = row_number()) %>% 
+  mutate(ctry = case_when(GRID_NO %in% 1:891 ~ "CZ",
+                           GRID_NO %in% 1000:6000 ~ "SK")) 
+
+# 1427 grid * 15 cultivars (BARL) = 21405
 
 
 # *** WR *** WR *** WR ** WR ***
-write.table(phu_cal1, paste0(path_out, crop, "/", crop, "_phu_cal.csv"), row.names = F, quote = F, sep = ";")
+write.table(phu_cal, paste0(path_out, crop, "/", crop, "_phu_cal.csv"), 
+            row.names = F, quote = F, sep = ";")
 # *** WR *** WR *** WR ** WR ***
 
-# phu_cal_runid <- phu_cal1 %>% 
-#   select(SimUID, GRID_NO, scenario, runid, KLIMREG) # link of runid, scenario, GRID and original SimU
-# 
-# 
-# # *** WR *** WR *** WR ** WR ***
-# write.table(phu_cal_runid, paste0(path_out, crop, "/", crop, "_phu_cal_runid.csv"), row.names = F, quote = F, sep = ";")
-# # *** WR *** WR *** WR ** WR ***
-
-# rm(phu_cal0)
-# rm(phu_cal1)
-rm(phusumA)
+# rm(phu_sum)
 
 ```
+
+# PARALLELIZATION OF EPIC SIMULATIONS
+
+split runs in 8 different folders to ensure faster simulations
+
+1 year simulated in 4-6 s
+total simulation time cca 4 hrs (wo parallel 11 hrs)
+
+**CZ**
+
+  1) 1-175
+  2) 176-350
+  3) 351-525
+  4) 526-701
+  5) 702-890
+  
+**SK**
+
+  6) 1336-2641
+  7) 2642-3734
+  8) 3735-5425
+
+```{r PARALLELIZATION}
+
+# phu_cal_PAR <- merge(phu_cal, czsk_tab[, c("CGMS_ID", "parF")], by.x = "GRID_NO", by.y = "CGMS_ID")
+phu_cal_PAR <- phu_cal %>% 
+  mutate(parallel = case_when(GRID_NO %in% 1:175 ~ 1,
+                              GRID_NO %in% 176:350 ~ 2,
+                              GRID_NO %in% 351:525 ~ 3,
+                              GRID_NO %in% 526:701 ~ 4,
+                              GRID_NO %in% 702:890 ~ 5,
+                              GRID_NO %in% 1336:2641 ~ 6,
+                              GRID_NO %in% 2642:3734 ~ 7,
+                              GRID_NO %in% 3735:5425 ~ 8))
+
+epic_parall <- c(1:8) # vector of parallels for runnig loops
+```
+
+\newpage
 
 # EPIC INPUT FILES
 
-```{r echo=T}
+create directories for storing EPIC input files:
 
-# create directories
+```{r echo=T}
 dir.create (paste0(path_out, crop, "/epicrun"), showWarnings = FALSE)
+dir.create(paste0(path_out, crop, "/epicrun_parallel"), showWarnings = FALSE)
 dir.create (paste0(path_out, crop, "/OPSC"), showWarnings = FALSE)
+dir.create (paste0(path_out, crop, "/OPSC_parallel"), showWarnings = FALSE)
+dir.create (paste0(path_out, crop, "/SITE_parallel"), showWarnings = FALSE)
+dir.create (paste0(path_out, crop, "/SOIL_parallel"), showWarnings = FALSE)
 dir.create (paste0(path_out, crop, "/PARM"), showWarnings = FALSE)
-dir.create (paste0(path_out, crop, "/_simulated"), showWarnings = FALSE)
+dir.create (paste0(path_out, crop, "/_outs"), showWarnings = FALSE)
 ```
 
 
-## 2 PRINT
+## EPICRUN
 
-files that needs to be uploaded to MS Access projects and print in Visual Basic
+*EPIC/EPIC0810/epicrun_x*
 
-### OPC
+EPICRUN for initial calibrations runs works with only 1 SIT and 1 SOL file for all grids
+
+*SIT*
+
+    + CZ: 119
+    + SK: 6135
+
+*SOL* 
+
+    + CZ: 10
+    + SK: 7
+    
+*OPC* created for each 'runid' (runid 167 = 167.opc)
+
+*DLY* created for each 'runid' (runid 167 = 167.dly) / same for WP1
+
+*WINDID* set as 1 for each 'runid'
+
+
+    
+```{r NO PARALLEL epicrun, eval = F}
+
+# *** READ *** READ *** READ ** READ ***
+phu_cal <- read.table(paste0(path_out, crop, "/", crop, "_phu_cal.csv"), header = TRUE, sep = ";")
+# *** READ *** READ *** READ ** READ ***
+
+# modify table to epicrun
+
+epicrun0 <- phu_cal %>%
+  select(runid, GRID_NO) %>%
+  mutate(SIT = case_when(phu_cal$cntry == "CZ" ~ 119,
+                         phu_cal$cntry == "SK" ~ 6135)) %>%
+  mutate(SOL = case_when(phu_cal$cntry == "CZ" ~ 10,
+                         phu_cal$cntry == "SK" ~ 7)) %>%
+  mutate(OPC = runid) %>%
+  mutate(WP1 = GRID_NO) %>%
+  mutate(DLY = GRID_NO) %>%
+  mutate(WINDID = 1) %>%
+  distinct()
+
+# *** WR *** WR *** WR ** WR ***
+write.table(epicrun0, file = paste0(path_out, crop, "/", crop, "_epicrun_cultivars_2print.txt"),
+                               row.names=FALSE, quote=FALSE, sep = ";")
+# *** WR *** WR *** WR ** WR ***
+
+# rm(epicrun0)
+
+```
+
+```{r PARALLEL epicrun}
+
+epicrun1 <- phu_cal_PAR %>%
+  select(parallel, runid, GRID_NO) %>%
+  mutate(SIT = case_when(phu_cal_PAR$ctry == "CZ" ~ 119,
+                         phu_cal_PAR$ctry == "SK" ~ 6135)) %>%
+  mutate(SOL = case_when(phu_cal_PAR$ctry == "CZ" ~ 10,
+                         phu_cal_PAR$ctry == "SK" ~ 7)) %>%
+  mutate(OPC = runid) %>%
+  mutate(WP1 = GRID_NO) %>%
+  mutate(WP1 = GRID_NO) %>%
+  mutate(WS2 = 0) %>%
+  mutate(DLY = GRID_NO) %>%
+  mutate(WINDID = 1) 
+
+print(phu_cal_PAR[duplicated(phu_cal_PAR$runid),])
+print(czsk_tab[duplicated(czsk_tab$CGMS_ID),])
+
+# epicruns print in R
+
+for(i in 1:length(epic_parall)) {
+  parall <- epicrun1 %>% 
+    filter(parallel == i)
+  dir.create(paste0(path_out, crop, "/epicrun_parallel/epicrun_", i), showWarnings = FALSE)
+  path_temp <- paste0(path_out, crop, "/epicrun_parallel/epicrun_", i)
+    for(j in parall$runid){
+      epicrun <- parall %>% 
+        filter(runid == j) %>% 
+        select(runid, SIT, WP1, WS2, WINDID, SOL, OPC, DLY)
+      write.fwf(epicrun, paste0(path_temp, "/epicrun_", j, ".dat"),
+          rownames = FALSE, colnames = FALSE, append=FALSE,
+          width = c(8,8,8,8,8,8,8,8), sep = "")
+      write.fwf(epicrun, paste0(path_epic, "EPIC_CS_", i, "/EPIC0810/epicrun_", j, ".dat"),
+          rownames = FALSE, colnames = FALSE, append=FALSE,
+          width = c(8,8,8,8,8,8,8,8), sep = "")
+    }
+}
+
+# WORKS !! 16/08/2022
+
+```
+
+
+## OPC
+
+Operation schedules 
+
+### OPSCCOM
+
+*OPSCCOM.dat*
+
+?
+
+```{r NO PARALLEL OPSCCOM, eval = F}
+
+# *** READ *** READ *** READ ** READ ***
+phu_cal <- read.table(paste0(path_out, crop, "/", crop, "_phu_cal.csv"), header = TRUE, sep = ";")
+# *** READ *** READ *** READ ** READ ***
+ 
+
+opsccom <- phu_cal %>%
+  select(runid) %>%
+  # rename("SimUID" = GRID_NO) %>%
+  # select(SimUID) %>%
+  mutate(file = paste(runid,".opc", sep = "")) %>%
+  distinct()
+
+
+# *** WR *** WR *** WR ** WR ***
+write.fwf(opsccom, paste0(path_out, crop, "/OPSCCOM.dat"),
+          rownames = FALSE, colnames = FALSE,
+          formatInfo = TRUE, sep = "  ")
+# *** WR *** WR *** WR ** WR ***
+```
+
+
+```{r PARALLEL OPSCCOM}
+
+for(i in 1:length(epic_parall)) {
+  opsccom <- phu_cal_PAR %>% 
+    filter(parallel == i) %>% 
+    select(runid) %>% 
+    mutate(file = paste(runid,".opc", sep = "")) %>%
+    distinct()
+  dir.create (paste0(path_out, crop, "/OPSC_parallel/OPSC_", i), showWarnings = FALSE)
+  path_temp <- paste0(path_out, crop, "/OPSC_parallel/OPSC_", i)
+  write.fwf(opsccom, paste0(path_temp, "/OPSCCOM.dat"),
+          rownames = FALSE, colnames = FALSE,
+          formatInfo = TRUE, sep = "  ")
+  write.fwf(opsccom, paste0(path_epic, "EPIC_CS_", i, "/OPSC/OPSCCOM.dat"),
+          rownames = FALSE, colnames = FALSE,
+          formatInfo = TRUE, sep = "  ")
+  }
+
+# WORKS !! 11/08/2022
+
+# FILE EXISTS: `r file.exists(paste0(path_epic, "EPIC_CS_", i, "/OPSC/OPSCCOM.dat)`
+# LAST MODIFIED:  `r file.info(paste0(path_epic, "EPIC_CS_", i, "/OPSC/OPSCCOM.dat)$ctime`
+```
+
+
+### OPS FILES IN R
+
+```{r PARALLEL OPS FILES PRINT IN R, eval = F}
+
+if(crop == "ALFA"){
+  cropp <- "ALF"
+} else if (crop == "BARL"){
+  cropp <- "BAR"
+} else if (crop == "CSIL"){
+  cropp <- "MAI"
+} else if (crop == "CORN"){
+  cropp <- "MAI" # ???????????????????????????????????????
+} else if (crop == "OATS"){
+  cropp <- "OAT"
+} else if (crop == "FPEA"){
+  cropp <- "PEA"
+} else if (crop == "POTA"){
+  cropp <- "POT"
+} else if (crop == "RAPE"){
+  cropp <- "RAP"
+} else if (crop == "RYE") {
+  cropp <- "RYE"
+} else if (crop == "SGBT"){
+  cropp <- "SGB"
+} else if (crop == "SUNF"){
+  cropp <- "SNF"
+} else if (crop == "SOYB"){
+  cropp <- "SOY"
+} else if (crop == "WWHT"){
+  cropp <- "WHE"
+} else {
+  print("ZEROO")
+}
+
+
+# *** READ *** READ *** READ ** READ ***
+phu_cal <- read.table(paste0(path_out, crop, "/", crop, "_phu_cal.csv"), header = TRUE, sep = ";")
+crop_cal <- read.table(paste0(path_out, crop, "/", crop, "_crop_cal.csv"), header = TRUE, sep = ";")
+crop_parm <- read.table(paste0(path_tab, "OPSC_Param_SVK13.txt"), header = TRUE, sep = ";")  # all crops by default
+# *** READ *** READ *** READ ** READ ***
+
+crop_parm <- crop_parm %>%
+  filter(CROP == cropp)  %>%   # filter parameters for current crop only
+  select(-CROP)
+
+# combine tables for OPSC / step by step according to ms access
+
+
+opsc1 <- merge(phu_cal_PAR, crop_cal, by = c("CROP", "CROPID", "PLN_JUL", "HRV_JUL")) 
+opsc1 <- opsc1 %>% 
+  distinct()
+opsc2 <- merge(opsc1, crop_parm, by = c("CROPID")) # 24057 (grid*cultivars) * 6 (operations) = 144342
+
+opsc3 <- opsc2 %>% # 8640
+  mutate(OPMONTH = case_when(OPERATION %in% c("HARV", "KILL") ~ HRV_MON,
+                             OPERATION %in% c("FRTK", "FRTP", "TILL", "SOW") ~ PLN_MON)) %>%
+  mutate(OPDAY = case_when(OPERATION %in% c("HARV", "KILL") ~ HRV_DAY,
+                           OPERATION %in% c("FRTK", "FRTP", "TILL", "SOW") ~ PLN_DAY)) %>%
+  mutate(Seq = case_when(seas == "SPG" ~ Seq1, 
+                         seas == "WIN" ~ Seq2))  %>% # sequence of operations differ for SPG and WIN crops
+  mutate(PARAMETER2 = case_when(OPERATION == "SOW" ~ round(PHU, 0),
+                                OPERATION %in% c("FRTK", "FRTP") ~ 25, TRUE ~ 0)) %>%  # https://www.sharpsightlabs.com/blog/case-when-r/
+  mutate(PARAMETER0 = 0.00) %>% 
+  mutate(PARAMETER100 = 0.00) %>% 
+  select(parallel, ctry, runid, scenario, GRID_NO,	CROPID,	CROP,	CropSpec,	OPERATION,	LUN, Year, OPMONTH,	OPDAY,
+         Seq,	IHC,	TYPE,	PARAMETER1,	PARAMETER2,	PARAMETER3,	PARAMETER4,
+         PARAMETER5,	PARAMETER6,	PARAMETER7,	PARAMETER0, PARAMETER100) %>% 
+  arrange(GRID_NO, scenario, Seq)
+
+
+# head of OPS file + ops file export !!! TAKES AGES !!!
+
+for(i in 1:length(epic_parall)) {
+  parall <- opsc3 %>% 
+    filter(parallel == i)
+  dir.create(paste0(path_out, crop, "/OPSC_parallel/OPSC_", i), showWarnings = F)
+  path_temp <- paste0(path_out, crop, "/OPSC_parallel/OPSC_", i)
+  for(j in parall$runid){
+    file.create(paste0(path_temp, "/", j, ".opc"))
+    opc_file <- paste0(path_temp, "/", j, ".opc")
+    txt <- (paste("Operations for runid", j, "CROP =", crop, ", EPIC-IIASA CZ, version 4"))
+    write.table(txt, file = paste(opc_file), 
+              append=F, quote = F, col.names = F, row.names = F)  
+    txt2 <- ("   3   0")
+    write.table(txt2, file = paste(opc_file), 
+              append=T, quote = F, col.names = F, row.names = F) 
+    opsfile <- parall %>% 
+        filter(runid == j) %>% 
+        select(Year, OPMONTH, OPDAY, TYPE, CROPID, PARAMETER1, PARAMETER2, PARAMETER3, # TYPE == operation id
+               PARAMETER4, PARAMETER0, PARAMETER5, PARAMETER6, PARAMETER7, PARAMETER100)
+    write.fwf(opsfile, file = paste(opc_file),
+          rownames = F, colnames = F, append=T,
+          width = c(2,2,2,5,10,5,8,8,8,8,8,8,8,8), sep = "")
+    write.fwf(opsfile, file = paste0(path_epic, "EPIC_CS_", i, "/OPSC/", j, ".opc"),
+          rownames = F, colnames = F, append=T,
+          width = c(2,2,2,5,10,5,8,8,8,8,8,8,8,8), sep = "")
+  }
+}
+  
+# WORKS !! 16/08/2022 path_epic, "EPIC_CS_", i, "/OPSC/OPSCCOM.dat"
+```
+
+### OPS FILES 2 PRINT
 
 *`r crop`_OPSC_cultivars_2print.txt*
 
@@ -350,7 +688,7 @@ operation schedules
 
 necessary table: *OPSC_Param_SVK13.txt*
 
-```{r}
+```{r OPSC_2print, eval=FALSE}
 
 # crop_parm file has different crop abbrevs -> adjust:
 
@@ -398,7 +736,7 @@ crop_parm <- crop_parm %>%
 # combine tables for OPSC / step by step according to ms access
 
 
-opsc1 <- merge(phu_cal, crop_cal, by = c("CROP", "CROPID", "PLN_JUL", "HRV_JUL")) 
+opsc1 <- merge(phu_cal_PAR, crop_cal, by = c("CROP", "CROPID", "PLN_JUL", "HRV_JUL")) 
 opsc1 <- opsc1 %>% 
   distinct()
 opsc2 <- merge(opsc1, crop_parm, by = c("CROPID")) # 24057 (grid*cultivars) * 6 (operations) = 144342
@@ -412,7 +750,7 @@ opsc3 <- opsc2 %>% # 8640
                          seas == "WIN" ~ Seq2))  %>% # sequence of operations differ for SPG and WIN crops
   mutate(PARAMETER2 = case_when(OPERATION == "SOW" ~ round(PHU, 0),
                                 OPERATION %in% c("FRTK", "FRTP") ~ 25, TRUE ~ 0)) %>%  # https://www.sharpsightlabs.com/blog/case-when-r/
-  select(cntry, runid, scenario, GRID_NO,	CROPID,	CROP,	CropSpec,	OPERATION,	LUN, Year, OPMONTH,	OPDAY,
+  select(parF, cntry, runid, scenario, GRID_NO,	CROPID,	CROP,	CropSpec,	OPERATION,	LUN, Year, OPMONTH,	OPDAY,
          Seq,	IHC,	TYPE,	PARAMETER1,	PARAMETER2,	PARAMETER3,	PARAMETER4,
          PARAMETER5,	PARAMETER6,	PARAMETER7) %>% 
   arrange(GRID_NO, scenario, Seq) 
@@ -420,74 +758,237 @@ opsc3 <- opsc2 %>% # 8640
   # dplyr::mutate(SimUId = cur_group_id()) 
 
 # *** WR *** WR *** WR ** WR ***
-write.table(opsc3, file = paste0(path_out, crop, "/", crop, "_OPSC_cultivars_2print.txt"),
-            row.names=FALSE, quote=FALSE, sep = ";")
+# write.table(opsc3, file = paste0(path_out, crop, "/", crop, "_OPSC_cultivars_2print.txt"),
+#             row.names=FALSE, quote=FALSE, sep = ";")
 # *** WR *** WR *** WR ** WR ***
 
-rm(opsc1)
-rm(opsc2)
-rm(opsc3)
-rm(crop_cal)
-rm(crop_parm)
+# rm(opsc1)
+# rm(opsc2)
+# rm(opsc3)
+# rm(crop_cal)
+# rm(crop_parm)
+```
 
+## SITE
+
+### SITECOM
+
+*SITECOM.dat*
+
+(same as SITE0810.dat)
+
+Catalog of site files available for the project
+
+EPIC looks in the site catalog file SITE0810.dat (or the catalog named in EPICFILE.dat) for the site number referenced in EPICRUN.dat and obtains the name of the file containing the site-specific data.
+The site-specific file is used to describe each Hydrologic Landuse Unit (HLU), which is
+homogenous with respect to climate, soil, landuse, and topography. The site may be of
+any size consistent with required HLU resolution. Site files (filename.sit ) describe each
+site: latitude, longitude, elevation, area, etc. A project may involve several sites
+(typically fields, but could be a larger area). Sites (fields) may contain buffers and filter
+strips, etc.
+The site catalog SITE0810.dat and the site files can be renamed and edited.
+
+```{r NO PARALLEL SITECOM, eval=F}
+sitecom <- phu_cal %>% 
+  select(runid) %>% 
+  mutate(file = case_when(phu_cal$cntry == "CZ" ~ "119.sit",
+                          phu_cal$cntry == "SK" ~ "6135.sit")) %>%
+  distinct()
+ 
+# *** WR *** WR *** WR ** WR ***
+write.fwf(sitecom,paste0(path_out, crop, "/SITECOM.dat"),
+          rownames = FALSE, colnames = FALSE,
+          formatInfo = TRUE, sep = "  ")
+# *** WR *** WR *** WR ** WR ***
 
 ```
 
-### EPICRUN
 
-*`r crop`_epicrun_cultivars_2print.txt*
-
-EPICRUN for initial calibrations runs works with only 1 SIT and SOL file for all grids
-
-* *SIT*
-
-    + CZ: 119
-    + SK: 6135
-
-* *SOL* 
-
-    + CZ: 10
-    + SK: 7
-    
-* *OPC* created for each 'runid' (runid 167 = 167.opc)
-
-* *DLY* created for each 'runid' (runid 167 = 167.dly) / same for WP1
-
-* *WINDID* set as 1 for each 'runid'
-
-
-    
-```{r}
+```{r PARALLEL SITECOM}
 
 # *** READ *** READ *** READ ** READ ***
-phu_cal <- read.table(paste0(path_out, crop, "/", crop, "_phu_cal.csv"), header = TRUE, sep = ";")
+# phu_cal <- read.table(paste0(path_out, crop, "/", crop, "_phu_cal.csv"), header = TRUE, sep = ";")
 # *** READ *** READ *** READ ** READ ***
 
-# modify table to epicrun
+for(i in 1:length(epic_parall)) {
+  sitecom <- phu_cal_PAR %>%
+    filter(parallel == i) %>%
+    mutate(ref = case_when(ctry == "CZ" ~ "119",
+                            TRUE ~ "6135")) %>%
+    mutate(file = case_when(ctry == "CZ" ~ "119.sit",
+                            TRUE ~ "6135.sit")) %>%
+    select(ref, file) %>%
+    distinct()
+  dir.create(paste0(path_out, crop, "/SITE_parallel/SITE_", i), showWarnings = FALSE)
+  path_temp <- paste0(path_out, crop, "/SITE_parallel/SITE_", i)
+  write.fwf(sitecom, paste0(path_temp, "/SITECOM.dat"),
+          rownames = FALSE, colnames = FALSE,
+          formatInfo = TRUE, sep = "  ")
+  write.fwf(sitecom, paste0(path_epic, "EPIC_CS_", i, "/SITE/SITECOM.dat"),
+          rownames = FALSE, colnames = FALSE,
+          formatInfo = TRUE, sep = "  ")
+  }
 
-epicrun0 <- phu_cal %>%
-  select(runid, GRID_NO) %>%
-  mutate(SIT = case_when(phu_cal$cntry == "CZ" ~ 119,
-                         phu_cal$cntry == "SK" ~ 6135)) %>%
-  mutate(SOL = case_when(phu_cal$cntry == "CZ" ~ 10,
-                         phu_cal$cntry == "SK" ~ 7)) %>%
-  mutate(OPC = runid) %>%
-  mutate(WP1 = GRID_NO) %>%
-  mutate(DLY = GRID_NO) %>%
-  mutate(WINDID = 1) %>%
+
+# BACKUP FOR MORE COMPLICATED SITECOMS
+
+# for(i in 1:length(epic_parall)) {
+#   sitecom <- phu_cal_PAR %>% 
+#     filter(parF == i) %>% 
+#     mutate(file = case_when(cntry == "CZ" ~ "119.sit",
+#                             TRUE ~ "6135.sit")) %>%
+#     select(runid, file) %>% 
+#     distinct()
+#   dir.create(paste0(path_out, crop, "/SITE_parallel/SITE_", i), showWarnings = FALSE)
+#   path_temp <- paste0(path_out, crop, "/SITE_parallel/SITE_", i)
+#   write.fwf(sitecom, paste0(path_temp, "/SITECOM.dat"),
+#           rownames = FALSE, colnames = FALSE,
+#           formatInfo = TRUE, sep = "  ")
+#   write.fwf(sitecom, paste0(path_epic, "EPIC_CS_", i, "/SITE/SITECOM.dat"),
+#           rownames = FALSE, colnames = FALSE,
+#           formatInfo = TRUE, sep = "  ")
+#   }
+
+# WORKS !! 16/08/2022
+
+```
+
+## SOIL
+
+### SOILCOM
+
+*SOILCOM.dat*
+
+(same as SOIL0810.dat) 
+
+Catalog of soil data files
+
+Soils EPIC looks in the soil catalog file SOIL0810.dat (or the catalog named in EPICFILE.dat) for the soil number referenced in EPICRUN.dat and obtains the name of the file containing the soil-specific data.
+The soil-specific file named filename.sol listed in the catalog file contains data
+describing the soil profile and the individual horizons. The study may involve several
+different soils for the farm or watershed analysis and are selected for use in the subarea
+file.
+The soil catalog SOIL0810.dat and the soil files can be renamed and edited.
+
+```{r NO PARALLEL SOILCOM, eval = F}
+soilcom <- phu_cal %>%
+  select(runid) %>% 
+  mutate(file = case_when(phu_cal$cntry == "CZ" ~ "10.sol",
+                          phu_cal$cntry == "SK" ~ "7.sol")) %>% # 10 == chernozem ; 210 == sandy soil
   distinct()
 
+
 # *** WR *** WR *** WR ** WR ***
-write.table(epicrun0, file = paste0(path_out, crop, "/", crop, "_epicrun_cultivars_2print.txt"),
-                               row.names=FALSE, quote=FALSE, sep = ";")
+write.fwf(soilcom, paste0(path_out, crop, "/SOILCOM.dat"),
+          rownames = FALSE, colnames = FALSE,
+          formatInfo = TRUE, sep = "  ")
 # *** WR *** WR *** WR ** WR ***
 
-rm(epicrun0)
+rm(opsccom)
+rm(sitecom)
+rm(soilcom)
+# rm(phu_cal_grid)
 
 ```
 
 
-### PARMFILES
+```{r PARALLEL SOILCOM}
+
+# *** READ *** READ *** READ ** READ ***
+# phu_cal <- read.table(paste0(path_out, crop, "/", crop, "_phu_cal.csv"), header = TRUE, sep = ";")
+# *** READ *** READ *** READ ** READ ***
+
+for(i in 1:length(epic_parall)) {
+  soilcom <- phu_cal_PAR %>% 
+    filter(parallel == i) %>% 
+    mutate(ref = case_when(ctry == "CZ" ~ "10",
+                            TRUE ~ "7")) %>%
+    mutate(file = case_when(ctry == "CZ" ~ "10.sol",
+                            TRUE ~ "7.sol")) %>%
+    select(ref, file) %>% 
+    distinct()
+  dir.create(paste0(path_out, crop, "/SOIL_parallel/SOIL_", i), showWarnings = FALSE)
+  path_temp <- paste0(path_out, crop, "/SOIL_parallel/SOIL_", i)
+  write.fwf(soilcom, paste0(path_temp, "/SOILCOM.dat"),
+          rownames = FALSE, colnames = FALSE,
+          formatInfo = TRUE, sep = "  ")
+  write.fwf(soilcom, paste0(path_epic, "EPIC_CS_", i, "/SOIL/SOILCOM.dat"),
+          rownames = FALSE, colnames = FALSE,
+          formatInfo = TRUE, sep = "  ")
+  }
+
+
+# BACKUP FOR MORE COMPLICATED SOILCOMS
+
+# for(i in 1:length(epic_parall)) {
+#   soilcom <- phu_cal_PAR %>% 
+#     filter(parF == i) %>% 
+#     mutate(file = case_when(cntry == "CZ" ~ "10.sol",
+#                             TRUE ~ "7.sol")) %>%
+#     select(runid, file) %>% 
+#     distinct()
+#   dir.create(paste0(path_out, crop, "/SOIL_parallel/SOIL_", i), showWarnings = FALSE)
+#   path_temp <- paste0(path_out, crop, "/SOIL_parallel/SOIL_", i)
+#   write.fwf(soilcom, paste0(path_temp, "/SOILCOM.dat"),
+#           rownames = FALSE, colnames = FALSE,
+#           formatInfo = TRUE, sep = "  ")
+#   write.fwf(soilcom, paste0(path_epic, "EPIC_CS_", i, "/SOIL/SOILCOM.dat"),
+#           rownames = FALSE, colnames = FALSE,
+#           formatInfo = TRUE, sep = "  ")
+#   }
+
+# WORKS !! 16/08/2022
+```
+
+## BATCH FILE
+
+```{r}
+
+
+for(i in 1:length(epic_parall)) {
+  path_temp <- paste0("c:/Users/krizovak/Documents/__EPIC__/EPIC_CS_v4_Aug2022/EPIC_CS_", i, "/EPIC0810/")
+  path_batch <- paste0("C:/Users/krizovak/Documents/__EPIC__/EPIC_CS_v4_Aug2022/EPIC_CS_", i)
+  Leprun <- list.files(path_temp, pattern = "epicrun_")
+  file.create(paste0(path_batch, "/RunEPIC_batch_", i, ".bat"))
+  batchfile <- paste0(path_batch, "/RunEPIC_batch_", i, ".bat")
+  line0 <- paste0("C:\\Users\\krizovak\\Documents\\__EPIC__\\EPIC_CS_v4_Aug2022\\EPIC_CS_", i, "\\EPIC0810")
+  line2 <- paste0("cd ", line0)
+  line4 <- ("")
+  txt <- paste("ECHO", line2, "PAUSE", line4, sep="\n")
+  # write.table(txt, file = paste0(path_batch, "/RunEPIC_batch.bat"), 
+  write.table(txt, file = paste(batchfile), 
+              append=F, quote = F, col.names = F, row.names = F)  
+  for(j in Leprun){
+    line5 <- paste0("rename ", j, " epicrun.dat")
+    line8 <- ("")
+    txt2 <- paste(line5, "epic0810_fixed", "del epicrun.dat", line8, sep="\n")
+    # write.table(txt2, file = paste0(path_batch, "/RunEPIC_batch.bat"), 
+    write.table(txt2, file = paste(batchfile), 
+              append=T, quote = F, col.names = F, row.names = F) 
+  }
+  txt3 <- "PAUSE"
+  write.table(txt3, file = paste(batchfile), 
+              append=T, quote = F, col.names = F, row.names = F) 
+}
+
+
+rm(path_batch)
+rm(path_temp)
+rm(Leprun)
+rm(batchfile)
+rm(line0)
+rm(line2)
+rm(line4)
+rm(line5)
+rm(line8)
+rm(txt)
+rm(txt2)
+rm(txt3)
+
+```
+
+
+## PARMFILES
 
 *`r crop`_PARM_cultivars_2print.txt*
 
@@ -515,96 +1016,91 @@ write.table(parm2, file = paste0(path_out, crop, "/", crop, "_PARM_cultivars_2pr
 ```
 
 
-## 4 EPIC
-
-files ready to be used by EPIC
 
 
-### OPSCCOM
 
-*OPSCCOM.dat*
+# WORKFLOW 
 
-?
+## EPIC0810 
 
-```{r}
+1) delete epicouts from v4 system (R/crop cultivar: backup folder with old outs, operational files: overwrite = T)
+2) OLD epicruns are deleted while running EPIC simulation
+3) NEW epicruns are generated directly to the folder
 
-# *** READ *** READ *** READ ** READ ***
-phu_cal <- read.table(paste0(path_out, crop, "/", crop, "_phu_cal.csv"), header = TRUE, sep = ";")
-# *** READ *** READ *** READ ** READ ***
- 
+```{r eval = F}
+par <- 0                # single step
+epic_parall <- 1:8      # loop
 
-opsccom <- phu_cal %>%
-  select(runid) %>%
-  # rename("SimUID" = GRID_NO) %>%
-  # select(SimUID) %>%
-  mutate(file = paste(runid,".opc", sep = "")) %>%
-  distinct()
+# 1)
+do.call(file.remove, list(list.files(paste0(path_epic, "EPIC_CS_", par, "/EPIC0810"), pattern = ".AC", full.names = TRUE)))
 
-
-# *** WR *** WR *** WR ** WR ***
-write.fwf(opsccom, paste0(path_out, crop, "/OPSCCOM.dat"),
-          rownames = FALSE, colnames = FALSE,
-          formatInfo = TRUE, sep = "  ")
-# *** WR *** WR *** WR ** WR ***
+for(i in 1:length(epic_parall)) {
+  path_source <- paste0(path_epic,"EPIC_CS_", i, "/EPIC0810/")
+  Louts <- list.files(path_source, pattern = ".ACM|.ACY")
+  file.remove(paste0(path_source, Louts)) # ACM and ACY files removal from EPIC0810 folder
+}
 
 ```
 
+## OPSC
 
-### SITECOM
+1) OPSCCOM generated directly ti the folder (overwrite = T)
+2) opc files generated directly ti the folder (overwrite = T) 
 
-*SITECOM.dat*
+## SITE
 
-?
+1) SITECOM generated directly ti the folder (overwrite = T)
 
-```{r}
-sitecom <- phu_cal %>% 
-  select(runid) %>% 
-  mutate(file = case_when(phu_cal$cntry == "CZ" ~ "119.sit",
-                          phu_cal$cntry == "SK" ~ "6135.sit")) %>%
-  distinct()
- 
-# *** WR *** WR *** WR ** WR ***
-write.fwf(sitecom,paste0(path_out, crop, "/SITECOM.dat"),
-          rownames = FALSE, colnames = FALSE,
-          formatInfo = TRUE, sep = "  ")
-# *** WR *** WR *** WR ** WR ***
+## SOIL
+
+1) SOILCOM generated directly ti the folder (overwrite = T)
+
+## WEATDATA
+
+1) no adjustments requiered
+
+## BATCH FILE 
+
+5) print new batchfiles (overwrite = T)
+
+
+
+```{r OPERAT LINES, eval = F}
+
+par <- 4
+
+# EPIC OUTS
+
+do.call(file.remove, list(list.files(paste0(path_epic, "EPIC_CS_", par, "/EPIC0810"), pattern = ".AC", full.names = TRUE)))
+
+# EPICRUNS
+
+do.call(file.remove, list(list.files(paste0(path_epic, "EPIC_CS_", par, "/EPIC0810"), pattern = "epicrun", full.names = TRUE)))
+
+# SITECOMS
+
+for(i in epic_parall) {
+  do.call(file.remove, list(list.files(paste0(path_epic, "EPIC_CS_", i, "/SITE"), pattern = "SITECOM", full.names = TRUE)))
+}
+
+# working lines
+
+epic_parall <- 2:8
+for(i in epic_parall) {
+  path_temp <- paste0(path_epic, "EPIC_CS_", i, "/EPIC0810/")
+  to_be_deleted <- list.files(path_temp, pattern = "epicrun_")
+  file.remove(to_be_deleted)
+}
+
+del <- paste0(path_epic, "EPIC_CS_1/EPIC0810/epicrun_4.dat")
+file.remove(del)
+
+to_be_deleted <- list.files(path_temp, pattern = "epicrun_")
+
+for(i in 1:length(epic_parall)) {
+  path_source <- paste0(path_epic,"EPIC_CS_", i, "/EPIC0810/")
+  Louts <- list.files(path_source, pattern = ".ACM|.ACY")
+  file.remove(paste0(path_source, Louts)) # ACM and ACY files removal from EPIC0810 folder
 
 ```
-
-
-### SOILCOM
-
-*SOILCOM.dat*
-
-?
-
-```{r}
-soilcom <- phu_cal %>%
-  select(runid) %>% 
-  mutate(file = case_when(phu_cal$cntry == "CZ" ~ "10.sol",
-                          phu_cal$cntry == "SK" ~ "7.sol")) %>% # 10 == chernozem ; 210 == sandy soil
-  distinct()
-
-
-# *** WR *** WR *** WR ** WR ***
-write.fwf(soilcom, paste0(path_out, crop, "/SOILCOM.dat"),
-          rownames = FALSE, colnames = FALSE,
-          formatInfo = TRUE, sep = "  ")
-# *** WR *** WR *** WR ** WR ***
-
-rm(opsccom)
-rm(sitecom)
-rm(soilcom)
-# rm(phu_cal_grid)
-
-```
-
-# CHECK FILES
-
-```{r}
-
-any(phu_cal$GRID_NO==891)
-
-```
-
 

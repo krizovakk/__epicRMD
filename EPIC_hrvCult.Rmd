@@ -36,6 +36,7 @@ path_in <- "c:/Users/krizovak/Documents/__EPIC__/R/"
 path_met <- "C:/Users/krizovak/Documents/__EPIC__/R/_tables/v3_czsk/" 
 path_tab <- "c:/Users/krizovak/Documents/__EPIC__/R/_tables/" 
 path_shp <- "c:/Users/krizovak/Documents/__EPIC__/R/_shapefiles/" 
+path_epic <- "c:/Users/krizovak/Documents/__EPIC__/EPIC_CS_v4_Aug2022/" 
 
 path_out <- "c:/Users/krizovak/Documents/__EPIC__/R/_cultivarRESULTS/" 
 
@@ -54,7 +55,7 @@ period <- 1989:2019
 ```{r}
 
 # crop <- "ALFA"
-# crop <- "BARL"
+crop <- "BARL"
 # crop <- "CSIL"
 # crop <- "CORN"
 # crop <- "OATS"
@@ -65,7 +66,7 @@ period <- 1989:2019
 # crop <- "SGBT"
 # crop <- "SUNF"
 # crop <- "SOYB"
-crop <- "WWHT"
+# crop <- "WWHT"
 
 
 # crop ID + seasonality
