@@ -1,0 +1,639 @@
+---
+title: "EPIC harvest Cultivars - parallelized"
+author: "Katerina Krizova"
+date: "`r format(Sys.Date(), '%Y-%m-%d')`"
+output:  
+  pdf_document:
+    toc: yes
+    toc_depth: 3
+ 
+---
+
+\newpage 
+
+```{r SETUP, include=FALSE}
+knitr::opts_chunk$set(echo = F, message=FALSE, fig.dim = c(9, 5))
+
+# install.packages("tidyverse", dependencies = T)
+# install.packages("gdata")
+require(tidyverse)
+# require(data.table)
+require(gdata) # write.fwf
+library(sf)
+library(sp)
+library(rgdal)
+require(reshape2)
+require(ggpubr)
+library(knitr)
+```
+# INITIAL SETUP
+
+## crop params
+
+```{r CROP PARAMETERS}
+
+
+# ********************************************************
+runspec <- "n001"                        # IMPORTANT !!!!!
+Ndose <- "N = 0 kg/ha"                 # IMPORTANT !!!!!
+# ********************************************************
+
+
+# crop <- "ALFA"
+# crop <- "BARL"
+# crop <- "CSIL"
+crop <- "CORN"
+# crop <- "OATS"
+# crop <- "FPEA"
+# crop <- "POTA"
+# crop <- "RAPE"
+# crop <- "RYE"
+# crop <- "SGBT"
+# crop <- "SUNF"
+# crop <- "SOYB"
+# crop <- "WWHT"
+
+# crop ID + seasonality
+
+if(crop == "ALFA"){
+    cropid <- 31 
+    cropname <- "alfalfa"
+    seas <- "OTH"
+  } else if (crop == "BARL"){
+    cropid <- 14
+    cropname <- "spring barley"
+    seas <- "SPG"
+  } else if (crop == "CSIL"){
+    cropid <- 29
+    cropname <- "corn silage"
+    seas <- "SPG"
+  } else if (crop == "CORN"){
+    cropid <- 2
+    cropname <- "corn"
+    seas <- "SPG"
+  } else if (crop == "OATS"){
+    cropid <- 16
+    cropname <- "oat"
+    seas <- "SPG"
+  } else if (crop == "FPEA"){
+    cropid <- 26
+    cropname <- "field peas"
+    seas <- "SPG"
+  } else if (crop == "POTA"){
+    cropid <- 51
+    cropname <- "potatoes"
+    seas <- "SPG"
+  } else if (crop == "RAPE"){
+    cropid <- 122
+    cropname <- "winter rapeseed"
+    seas <- "WIN"
+  } else if (crop == "RYE") {
+    cropid <- 19
+    cropname <- "rye"
+    seas <- "WIN"
+  } else if (crop == "SGBT"){
+    cropid <- 62
+    cropname <- "sugarbeet"
+    seas <- "SPG"
+  } else if (crop == "SUNF"){
+    cropid <- 7
+    cropname <- "sunflower"
+    seas <- "SPG"
+  } else if (crop == "SOYB"){
+    cropid <- 1
+    cropname <- "soybean"
+    seas <- "SPG"
+  } else if (crop == "WWHT"){
+    cropid <- 10
+    cropname <- "winter wheat"
+    seas <- "WIN"
+  } else {
+    print("ZEROO")
+}
+
+# WCY parameter (fraction water in yield ) WCY = 0.12 -> yield + wcy -> 1.12
+
+# ??? RAPE ???
+
+wcy <- case_when(crop %in% c("ALFA", "BARL", "FPEA", "RYE", "WWHT") ~ 1.12,
+                 crop %in% c("CSIL", "CORN") ~ 1.15, 
+                 crop %in% c("OATS") ~ 1.10, 
+                 crop %in% c("POTA") ~ 1.8, 
+                 crop %in% c("SGBT") ~ 1.84, 
+                 crop %in% c("SUNF") ~ 1.06, 
+                 crop %in% c("SOYB") ~ 1.13) 
+
+epic_parall <- c(1:8)
+```
+
+## paths 
+
+```{r SET PATHS + BACKUP REPORT, echo = T}
+
+path_in <- "c:/Users/krizovak/Documents/__EPIC__/R/" 
+
+path_met <- "C:/Users/krizovak/Documents/__EPIC__/R/_tables/v3_czsk/" 
+path_epic <- "c:/Users/krizovak/Documents/__EPIC__/EPIC_CS_v4_Aug2022/" 
+
+path_tab <- "c:/Users/krizovak/Documents/__EPIC__/R/_tables/" 
+path_shp <- "c:/Users/krizovak/Documents/__EPIC__/R/_shapefiles/" 
+
+path_out <- "c:/Users/krizovak/Documents/__EPIC__/R/_nitroRESULTS/" 
+
+# REPORT COPY
+
+report <- "C:/Users/krizovak/Documents/__EPIC__/R/markdown/__epicRMD/EPIC_hrvNitro.pdf"
+
+if (file.exists(report)){
+  print("File exists!")
+  mtime <- file.info(report)$mtime
+  # mtime <- as.Date(mtime, format=c('y-m-d','h-m-s'))
+  # mtime <- as.POSIXlt(mtime)
+  mtime <- format(mtime,format='%Y%m%d-%H%M%S')
+  path_old <- "C:/Users/krizovak/Documents/__EPIC__/R/markdown/__epicRMD/"
+  path_new <- paste0(path_out, crop, "/_outs/_reports/")
+  file.rename(from = paste0(path_old, "PARALL_hrvCult.pdf"), 
+              to = paste0(path_new, "PARALL_hrvCult_", mtime, ".pdf"))
+} else {
+  print("File does not exist!")
+}
+```
+
+## time period
+
+```{r SET TIME PERIOD, echo = T}
+period <- 1989:2019 
+```
+
+
+* crop: `r crop`
+
+* crop ID: `r cropid`
+
+* crop name: `r cropname`
+
+* seasonality: `r seas`
+
+* WCY parameter: `r wcy`
+
+
+\newpage
+
+# SPATIAL REFERENCE
+
+```{r PLOT GRIDS}
+czsk_shp <- st_read(paste0(path_shp, "CS_CGMS10k_SpatRef_v0.shp"), crs = 5514, quiet = T) # CZ i SK crs = 5514, 
+plot(czsk_shp)
+```
+
+* total GRIDS: `r nrow(czsk_shp)`
+
+
+\newpage
+
+# HARVEST OUTPUT FILES
+
+Steps for AFTER simulation:
+
+## COPY AND PASTE ACM AND ACY
+
+EPIC output files are stored in **EPIC_CS_X/EPIC0810** folder
+
+Backup files:
+
+* create a folder '_outs' in cultivar results folder
+
+* create a subfolder 'crop_outs_runspec' in '_outs' folder
+
+* copy all files in both newly created folders, so that: 
+
+  + there is a backup in date-named folder
+  
+  + there are always the latest ACM and ACY files to be further worked with
+
+```{r COPY ACM AND ACY, include=F}
+
+# batch
+
+for(i in 1:length(epic_parall)) {
+  dir.create(paste0(path_out, crop, "/_outs/outs_", runspec), showWarnings = FALSE) #showWarnings = FALSE -> folder is not overwritten, files copied into the firstly created one
+  path_source <- paste0(path_epic,"EPIC_CS_", i, "/EPIC0810/")
+  Louts <- list.files(path_source, pattern = ".ACM|.ACY") # pattern either ACM or ACY (only AC was not enough because of WORKSPACE file)
+  newDir <- paste0(path_out, crop, "/_outs/outs_", runspec, "/")
+  newDir2 <- paste0(path_out, crop, "/_outs/")
+  file.copy(from = paste0(path_source, Louts),   # Output files backup in folder with date
+          to = paste0(newDir, Louts), overwrite = TRUE)
+#   file.copy(from = paste0(path_source, Louts),   # Latest ouptut files in '_outs' folder
+#           to = paste0(newDir2, Louts), overwrite = TRUE)
+ }
+
+
+# ACM and ACY files are deleted befor a new run (EPIC_runCult.Rmd)
+
+# # !!! FINAL !!! FINAL !!! FINAL !!!
+# for(i in 1:length(epic_parall)) {
+#   path_source <- paste0(path_epic,"EPIC_CS_", i, "/EPIC0810/")
+#   Louts <- list.files(path_source, pattern = ".ACM|.ACY")
+#   file.remove(paste0(path_source, Louts)) # ACM and ACY files removal from EPIC0810 folder
+# }
+# # !!! FINAL !!! FINAL !!! FINAL !!!
+
+# single 
+
+# currentDate <- Sys.Date()
+# dir.create(paste0(path_out, crop, "/_outs/outs_", runspec), showWarnings = FALSE) #showWarnings = FALSE -> folder is not overwritten, files copied into the firstly created one
+# path_source <- paste0(path_epic,"EPIC_CS_4/EPIC0810/")
+# Louts <- list.files(path_source, pattern = ".ACM|.ACY") # pattern either ACM or ACY (only AC was not enough because of WORKSPACE file)
+# newDir <- paste0(path_out, crop, "/_outs/outs_", runspec, "/")
+# newDir2 <- paste0(path_out, crop, "/_outs/")
+# file.copy(from = paste0(path_source, Louts),   # Output files backup in folder with date
+#           to = paste0(newDir, Louts))
+# file.copy(from = paste0(path_source, Louts),   # Latest ouptut files in '_outs' folder
+#           to = paste0(newDir2, Louts), overwrite = TRUE)
+
+# remove files and paths
+
+rm(path_source)
+rm(Louts)
+rm(newDir)
+rm(newDir2)
+
+```
+
+## ACM HARVEST
+
+*Annual cropman file*
+
+Variable / Description / Units  
+Y = Year  
+RT# = Rotation number  
+PRCP = Precipitation mm  
+ET = Potential evapotranspiration mm  
+ET = Evapotranspiration mm  
+Q = Runoff mm  
+SSF = Subsurface flow mm  
+PRK = Percolation mm  
+CVF = MUSLE crop cover factor  
+MUSS = Water erosion T/ha  
+YW = Wind erosion T/ha  
+GMN = N mineralized kg/ha  
+NMN = Humus mineralization kg/ha  
+NFIX = Nitrogen fixation kg/ha  
+NITR = Nitrification kg/ha  
+AVOL = Nitrogen volatilization kg/ha  
+DN = Denitrification kg/ha  
+YON = Nitrogen loss with sediment kg/ha  
+QNO3 = Nitrate loss in surface runoff kg/ha  
+SSFN = Nitrogen in subsurface flow kg/ha  
+PRKN = Nitrogen loss in percolate kg/ha  
+MNP = Phosphorus mineralized kg/ha  
+YP = Phosphorus loss in sediment kg/ha  
+QAP = Labile phosphorus loss in runoff kg/ha  
+PRKP = Phosphorus loss in percolate kg/ha  
+LIME = Lime applied kg/ha  
+OCPD = Organic carbon in plow layer depth set by PARM(16) kg/ha  
+TOC = Organic carbon in soil profile kg/ha  
+APBC = Labile phosphorus content in plow layer %  
+TAP = Total labile p in soil profile kg/ha  
+TNO3 = Total nitrate in soil profile kg/ha  
+
+```{r ACM HARVEST, eval=T}
+
+# load ACM files without 11 lines of header, combine into a single df
+
+acmnames <- list.files(paste0(path_out, crop, "/_outs/outs_", runspec, "/"),
+                       pattern= "\\.ACM$")  # Identify file names
+
+acm_comb = data.frame() # empty dataframe to write ACM files in
+
+for(i in acmnames) { # TAKES AGES !!
+  a <- read.table(paste0(path_out, crop, "/_outs/outs_", runspec, "/", i), header = FALSE, skip = 11)
+  a$source <- paste0(i)
+  a$source <- str_sub(a$source,1,nchar(a$source)-4)
+  df <- data.frame(a) 
+  acm_comb <- rbind(acm_comb, df)
+}
+
+# rename header
+
+col_names_acm <- c("YR",  "RT", "PRCP", "PET", "ET ", "Q", "SSF", "PRK", "CVF", "MUSS", "YW", "GMN", "NMN", "NFIX", "NITR", "AVOL",
+                   "DN", "YON", "QNO3", "SSFN", "PRKN", "MNP", "YP", "QAP", "PRKP", "LIME", "OCPD", "TOC", "APBC", "TAP", "TNO3", "runid")
+names(acm_comb) <- col_names_acm
+# names(acm) <- col_names_acm
+
+
+# *** WR *** WR *** WR ** WR ***
+# currentDate <- Sys.Date()
+# write.csv(acm_comb, file = paste0(path_out, crop, "/_outs/acm.csv"), row.names=FALSE)
+write.csv(acm_comb, file = paste0(path_out, crop, "/_outs/outs_", runspec,"/", runspec
+                                 , "_", crop, "_acm.csv"), row.names=FALSE)
+# *** WR *** WR *** WR ** WR ***
+
+```
+
+## ACY HARVEST
+
+*Annual Crop Yield*
+
+Variable / Description / Units  
+Y = Year  
+RT# = Fertilizer ID  
+CPNM = Crop name  
+YLDG = Grain yield T/ha  
+YLDF = Forage yield T/ha  
+BIOM Biomass T/ha  
+YLN = Nitrogen used by crop kg/ha  
+YLP = Phosphorus used by crop kg/ha  
+FTN = Nitrogen applied kg/ha  
+FTP = Phosphorus applied kg/ha  
+IRGA = Irrigation volume applied mm  
+IRDL = Irrigation water lost in delivery system mm  
+WUEF = Water use efficiency (crop yield / growing season ET) kg/mm  
+GSET = Growing season et (mm) mm  
+CAW = Crop available water (soil water at planting + growing season rainfall - runoff) mm  
+CRF = Growing season rainfall mm  
+CQV = Growing season runoff mm  
+COST = Cost of production $/ha  
+COOP = Operating cost $/ha  
+RYLG = Return for grain yield $/ha  
+RYLF = Return for forage yield $/ha  
+PSTF = Pest damage factor (fraction of yield remaining after pest damage  
+WS = Water stress days d/yr  
+NS = Nitrogen stress days d/yr  
+PS = Phosphorus stress days d/yr  
+KS = Potassium stress days d/yr  
+TS = Temperature stress days d/yr  
+AS = Aeration stress days d/yr  
+SS = Salinity stress factor  
+PPOP = Plant population plants/m2  
+IPLD = Planting date  
+IGMD = Germination date  
+IHVD = Harvest date  
+
+```{r ACY HARVEST, eval=T}
+
+# load ACY files without 11 lines of header and a single file
+
+acynames <- list.files(paste0(path_out, crop, "/_outs/outs_", runspec, "/"), pattern= "\\.ACY$")   # Identify file names
+
+acy_comb = data.frame() # empty dataframe to write ACM files in
+
+for(i in acynames) { # TAKES AGES !!
+  a <- read.table(paste0(path_out, crop, "/_outs/outs_", runspec, "/", i), header = FALSE, skip = 11)
+  a$source <- paste0(i)
+  a$source <- str_sub(a$source,1,nchar(a$source)-4)
+  df <- data.frame(a) 
+  acy_comb <- rbind(acy_comb, df)
+}
+
+# rename header
+
+col_names_acy <- c("YR",  "RT", "CPNM", "YLDG", "YLDF", "WCYD", "HI", "BIOM", "RW", 
+                   "YLN", "YLP", "YLC", "FTN", "FTP", "IRGA", "IRDL", "WUEF", "GSET", 
+                   "CAW", "CRF", "CQV", "COST", "COOP", "RYLG", "RYLF", "PSTF", 
+                   "WS", "NS", "PS", "KS", "TS", "AS", "SS", "PPOP", 
+                   "IPLD", "IGMD", "IHVD", "runid")
+names(acy_comb) <- col_names_acy
+names(acy_comb) <- col_names_acy
+
+
+# *** WR *** WR *** WR ** WR ***
+# currentDate <- Sys.Date()
+# write.csv(acy_comb, file = paste0(path_out, crop, "/_outs/acy.csv"), row.names=FALSE)
+write.csv(acy_comb, file = paste0(path_out, crop, "/_outs/outs_", runspec,"/",
+                                 runspec, "_", crop, "_acy.csv"), row.names=FALSE)
+# *** WR *** WR *** WR ** WR ***
+
+
+rm(a)
+rm(df)
+rm(acm_comb)
+rm(acy_comb)
+```
+
+
+## OUTPUT TABLE
+
+ACM and ACY tables combined in one  
+Contains all important outputs of the simulation
+
+```{r OUTPUT TABLE}
+
+# *** READ *** READ *** READ ** READ ***
+phu_cal_PAR <- read.table(paste0(path_out, crop, "/", crop, "_phu_cal_PAR.csv"), header = TRUE, sep = ";")
+cultivars <- read.table(paste0(path_out, crop, "/", crop, "_cultivars.csv"), header = TRUE, sep = ",")
+
+# acm <- read.table(paste0(path_out, crop, "/_outs/acm.csv"), header = T, sep = ",")
+acm <- read.table(paste0(path_out, crop, "/_outs/outs_", runspec,"/",
+                                 runspec, "_", crop, "_acm.csv"), header = T, sep = ",")
+# acy <- read.table(paste0(path_out, crop, "/_outs/acy.csv"), header = T, sep = ",")
+acy <- read.table(paste0(path_out, crop, "/_outs/outs_", runspec,"/",
+                                 runspec, "_", crop, "_acy.csv"), header = T, sep = ",")
+# OR ?
+  
+# if (seas == "SPG"){
+#   acm <- read.table(paste0(path_out, crop, "//_outs/acm.csv"), header = T, sep = ",")
+#   acy <- read.table(paste0(path_out, crop, "//_outs/acy.csv"), header = T, sep = ",")
+# }  else if (seas == "WIN"){
+#   acm <- read.table(paste0(path_out, crop, "//_outs/acm.csv"), header = T, sep = ",") %>%
+#   filter(YR != 1989)
+#   acy <- read.table(paste0(path_out, crop, "//_outs/acy.csv"), header = T, sep = ",") %>%
+#   filter(IHVD != 0)
+# } else {
+#   print("ZEROO")
+#   
+# }
+# *** READ *** READ *** READ ** READ ***
+
+# manage WIN crops
+
+# merge ACM and ACY; apply WCY parameter
+
+outtab0 <- merge(acm, acy)
+outtab <- merge(outtab0, phu_cal_PAR, by.x = "runid", by.y = "runid") %>% # join ACM and ACY with SCENARIO
+  mutate(SC_TYP = case_when(str_detect(scenario, "1") ~ 1,
+                        str_detect(scenario, "2") ~ 2,
+                        str_detect(scenario, "3") ~ 3))
+outtab$YLDG <- (outtab$YLDG*wcy) # WCY parameter / fraction water in yield 
+
+rm(acm)
+rm(acy)
+rm(phu_cal_PAR)
+rm(outtab0)
+
+
+# outtab == output tables; YLDG corrected with WCY parameter
+
+
+# JOIN outtab AND CZSK SHAPEFILE FOR ALL RES PARAMS VISUALISATIONS
+
+result_map <- merge(czsk_shp, outtab, by.x = "CGMS_ID", by.y = "GRID", all.x = T)
+
+```
+  
+  
+\newpage
+
+# CZ ONLY
+
+
+```{r FILTER ONLY CZ GRIDS}
+
+cz_res <- result_map %>% 
+  filter(str_detect(OKRES, "CZ"))
+
+```
+
+# MAPS
+
+## PRKN FOR SELECTED YEARS
+
+```{r MAP PRKN SEL YEARS}
+
+sel_years <- c(2010,2015,2018)
+
+# prkn_lim = c(0, 100)
+
+for(i in sel_years) {  
+  a <- cz_res %>% filter(YR == i)
+  g <- ggplot(a, aes(geometry = geometry, fill= PRKN))+
+    geom_sf()+
+    ggtitle(paste0("Nitrogen loss in percolate for ", Ndose ," (", i, ", ",cropname,")"))+ 
+    scale_fill_gradient("[kg/ha]", 
+    low = "seashell2",
+    high = "red3",
+    # limits = prkn_lim,
+    space = "Lab",
+    na.value = "grey50",
+    guide = "colourbar",
+    aesthetics = "fill")+ 
+    coord_sf()+
+    theme_void()+
+    theme(axis.ticks.x = element_blank(), axis.text.x = element_blank(), 
+        axis.ticks.y = element_blank(), axis.text.y = element_blank(),
+        plot.title = element_text(hjust = 0.5))
+  print(g)
+  ggsave(paste0(path_out, crop, "/_outs/prkn_", i, "_", runspec, ".jpg"), device = "jpg", width = 10, height = 6, dpi = 300)
+}
+
+```
+
+## YLDG FOR SELECTED YEARS
+
+```{r MAP PRKN SEL YEARS}
+
+sel_years <- c(2010,2015,2018)
+
+# yldg_lim = c(0, 100)
+
+for(i in sel_years) {  
+  a <- cz_res %>% filter(YR == i)
+  g <- ggplot(a, aes(geometry = geometry, fill= YLDG))+
+    geom_sf()+
+    ggtitle(paste0("Simulated crop yield for ", Ndose ," (", i, ", ",cropname,")"))+ 
+    scale_fill_gradient("[t/ha]", 
+    low = "seashell2",
+    high = "forestgreen",
+    # limits = prkn_lim,
+    space = "Lab",
+    na.value = "grey50",
+    guide = "colourbar",
+    aesthetics = "fill")+ 
+    coord_sf()+
+    theme_void()+
+    theme(axis.ticks.x = element_blank(), axis.text.x = element_blank(), 
+        axis.ticks.y = element_blank(), axis.text.y = element_blank(),
+        plot.title = element_text(hjust = 0.5))
+  print(g)
+  ggsave(paste0(path_out, crop, "/_outs/yldg_", i, "_", runspec, ".jpg"), device = "jpg", width = 10, height = 6, dpi = 300)
+}
+
+```
+
+## PRKN - AVERAGE 1989-2019
+
+```{r MAP PRKN AVERAGE}
+
+avg <- cz_res %>% 
+  select(CGMS_ID, YR, scenario, SC_TYP, PRKN, geometry) %>% 
+  group_by(CGMS_ID, scenario) %>% 
+  mutate(aPRKN = mean(PRKN)) %>%
+  select(-YR, -PRKN) %>% 
+  distinct()
+
+# prkn_lim = c(0, 1100)
+
+# for(i in sel_years) {  
+#   a <- cz_res %>% filter(YR == i)
+#   g <- ggplot(a, aes(geometry = geometry, fill= PRK))+
+#     geom_sf()+
+#     ggtitle(paste0("Average nitrogen loss in percolate for ", Ndose ,
+#                    " (1969-2019", cropname,")"))+ 
+#     scale_fill_gradient("[kg/ha]", 
+#     low = "seashell2",
+#     high = "red3",
+#     # limits = prkn_lim,
+#     space = "Lab",
+#     na.value = "grey50",
+#     guide = "colourbar",
+#     aesthetics = "fill")+ 
+#     coord_sf()+
+#     theme_void()+
+#     theme(axis.ticks.x = element_blank(), axis.text.x = element_blank(), 
+#         axis.ticks.y = element_blank(), axis.text.y = element_blank(),
+#         plot.title = element_text(hjust = 0.5))
+#   print(g)
+#   ggsave(paste0(path_out, crop, "/_outs/prkn_", i, "_", runspec, ".jpg"), device = "jpg", width = 10, height = 6, dpi = 300)
+# }
+
+g <- ggplot(avg, aes(geometry = geometry, fill= aPRKN))+
+    geom_sf()+
+    ggtitle(paste0("Average nitrogen loss in percolate for ", Ndose ,
+                   " (1989-2019, ", cropname,")"))+ 
+    scale_fill_gradient("[kg/ha]", 
+    low = "seashell2",
+    high = "red3",
+    # limits = prkn_lim,
+    space = "Lab",
+    na.value = "grey50",
+    guide = "colourbar",
+    aesthetics = "fill")+ 
+    coord_sf()+
+    theme_void()+
+    theme(axis.ticks.x = element_blank(), axis.text.x = element_blank(), 
+        axis.ticks.y = element_blank(), axis.text.y = element_blank(),
+        plot.title = element_text(hjust = 0.5))
+  print(g)
+  ggsave(paste0(path_out, crop, "/_outs/prkn_AVG_", runspec, ".jpg"), device = "jpg", width = 10, height = 6, dpi = 300)
+
+  
+print("READY TO CLOSE")
+  
+```
+
+
+# OUTPUTS CHECK
+
+Maps look the same for all doses
+need to check the output files, wheather or not are all the same
+
+
+```{r OUTPUTS CHECK, eval = F}
+
+md000 <- read.table(paste0(path_out, crop, "/_outs/outs_n000/n000_", crop, "_acm.csv"), header = T, sep = ",")
+md060 <- read.table(paste0(path_out, crop, "/_outs/outs_n060/060", crop, "_acm.csv"), header = T, sep = ",")
+md120 <- read.table(paste0(path_out, crop, "/_outs/outs_n120/n120_", crop, "_acm.csv"), header = T, sep = ",")
+md180 <- read.table(paste0(path_out, crop, "/_outs/outs_n180/n180_", crop, "_acm.csv"), header = T, sep = ",")
+md240 <- read.table(paste0(path_out, crop, "/_outs/outs_n240/n240_", crop, "_acm.csv"), header = T, sep = ",")
+
+yd000 <- read.table(paste0(path_out, crop, "/_outs/outs_n000/n000_", crop, "_acy.csv"), header = T, sep = ",")
+yd060 <- read.table(paste0(path_out, crop, "/_outs/outs_n060/n060_", crop, "_acy.csv"), header = T, sep = ",")
+yd120 <- read.table(paste0(path_out, crop, "/_outs/outs_n120/n120_", crop, "_acy.csv"), header = T, sep = ",")
+yd180 <- read.table(paste0(path_out, crop, "/_outs/outs_n180/n180_", crop, "_acy.csv"), header = T, sep = ",")
+yd240 <- read.table(paste0(path_out, crop, "/_outs/outs_n240/n240_", crop, "_acy.csv"), header = T, sep = ",")
+
+
+```
+
+
+

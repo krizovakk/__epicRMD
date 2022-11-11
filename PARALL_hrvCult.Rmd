@@ -32,6 +32,9 @@ library(knitr)
 ## crop params
 
 ```{r CROP PARAMETERS}
+
+runspec <- "n0"
+
 # crop <- "ALFA"
 # crop <- "BARL"
 # crop <- "CSIL"
@@ -131,7 +134,7 @@ path_epic <- "c:/Users/krizovak/Documents/__EPIC__/EPIC_CS_v4_Aug2022/"
 path_tab <- "c:/Users/krizovak/Documents/__EPIC__/R/_tables/" 
 path_shp <- "c:/Users/krizovak/Documents/__EPIC__/R/_shapefiles/" 
 
-path_out <- "c:/Users/krizovak/Documents/__EPIC__/R/_cultivarRESULTS/" 
+path_out <- "c:/Users/krizovak/Documents/__EPIC__/R/_nitroRESULTS/" 
 
 # REPORT COPY
 
@@ -195,7 +198,7 @@ Backup files:
 
 * create a folder '_outs' in cultivar results folder
 
-* create a subfolder 'crop_outs_currentDate' in '_outs' folder
+* create a subfolder 'crop_outs_runspec' in '_outs' folder
 
 * copy all files in both newly created folders, so that: 
 
@@ -208,11 +211,10 @@ Backup files:
 # batch
 
 for(i in 1:length(epic_parall)) {
-  currentDate <- Sys.Date()
-  dir.create(paste0(path_out, crop, "/_outs/outs_", currentDate), showWarnings = FALSE) #showWarnings = FALSE -> folder is not overwritten, files copied into the firstly created one
+  dir.create(paste0(path_out, crop, "/_outs/outs_", runspec), showWarnings = FALSE) #showWarnings = FALSE -> folder is not overwritten, files copied into the firstly created one
   path_source <- paste0(path_epic,"EPIC_CS_", i, "/EPIC0810/")
   Louts <- list.files(path_source, pattern = ".ACM|.ACY") # pattern either ACM or ACY (only AC was not enough because of WORKSPACE file)
-  newDir <- paste0(path_out, crop, "/_outs/outs_", currentDate, "/")
+  newDir <- paste0(path_out, crop, "/_outs/outs_", runspec, "/")
   newDir2 <- paste0(path_out, crop, "/_outs/")
   file.copy(from = paste0(path_source, Louts),   # Output files backup in folder with date
           to = paste0(newDir, Louts))
@@ -233,11 +235,11 @@ for(i in 1:length(epic_parall)) {
 
 # single 
 
-currentDate <- Sys.Date()
-dir.create(paste0(path_out, crop, "/_outs/outs_", currentDate), showWarnings = FALSE) #showWarnings = FALSE -> folder is not overwritten, files copied into the firstly created one
+# currentDate <- Sys.Date()
+dir.create(paste0(path_out, crop, "/_outs/outs_", runspec), showWarnings = FALSE) #showWarnings = FALSE -> folder is not overwritten, files copied into the firstly created one
 path_source <- paste0(path_epic,"EPIC_CS_4/EPIC0810/")
 Louts <- list.files(path_source, pattern = ".ACM|.ACY") # pattern either ACM or ACY (only AC was not enough because of WORKSPACE file)
-newDir <- paste0(path_out, crop, "/_outs/outs_", currentDate, "/")
+newDir <- paste0(path_out, crop, "/_outs/outs_", runspec, "/")
 newDir2 <- paste0(path_out, crop, "/_outs/")
 file.copy(from = paste0(path_source, Louts),   # Output files backup in folder with date
           to = paste0(newDir, Louts))
@@ -315,10 +317,10 @@ names(acm_comb) <- col_names_acm
 
 
 # *** WR *** WR *** WR ** WR ***
-currentDate <- Sys.Date()
+# currentDate <- Sys.Date()
 write.csv(acm_comb, file = paste0(path_out, crop, "/_outs/acm.csv"), row.names=FALSE)
-write.csv(acm_comb, file = paste0(path_out, crop, "/_outs/outs_", currentDate,"/",
-                                 currentDate, "_", crop, "_acm.csv"), row.names=FALSE)
+write.csv(acm_comb, file = paste0(path_out, crop, "/_outs/outs_", runspec,"/", runspec
+                                 , "_", crop, "_acm.csv"), row.names=FALSE)
 # *** WR *** WR *** WR ** WR ***
 
 ```
@@ -390,10 +392,10 @@ names(acy_comb) <- col_names_acy
 
 
 # *** WR *** WR *** WR ** WR ***
-currentDate <- Sys.Date()
+# currentDate <- Sys.Date()
 write.csv(acy_comb, file = paste0(path_out, crop, "/_outs/acy.csv"), row.names=FALSE)
-write.csv(acy_comb, file = paste0(path_out, crop, "/_outs/outs_", currentDate,"/",
-                                 currentDate, "_", crop, "_acy.csv"), row.names=FALSE)
+write.csv(acy_comb, file = paste0(path_out, crop, "/_outs/outs_", runspec,"/",
+                                 runspec, "_", crop, "_acy.csv"), row.names=FALSE)
 # *** WR *** WR *** WR ** WR ***
 
 

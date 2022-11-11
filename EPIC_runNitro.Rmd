@@ -1,5 +1,5 @@
 ---
-title: "EPIC run Cultivars - parallelized"
+title: "EPIC / parallel / Nitrogen"
 author: "Katerina Krizova"
 date: "`r format(Sys.Date(), '%Y-%m-%d')`"
 output: 
@@ -45,6 +45,16 @@ path_out <- "c:/Users/krizovak/Documents/__EPIC__/R/_nitroRESULTS/"
 ```{r echo = T}
 
 period <- 1989:1999
+```
+
+## nitrogen dose
+
+```{r SET NITROGEN DOSE}
+n <- 0.1
+# n <- 60
+# n <- 120
+# n <- 180
+# n <- 240
 ```
 
 ## crop params
@@ -178,6 +188,8 @@ print(czsk_tab[duplicated(czsk_tab$CGMS_ID),])
 
 
 # CALCULATING PHU FROM DLY FILES
+
+run only once !!!
 
 calculates optimal PHU (potential heat units) for each cultivar
 
@@ -746,16 +758,14 @@ opsc3 <- opsc2 %>% # 8640
   mutate(Seq = case_when(seas == "SPG" ~ Seq1, 
                          seas == "WIN" ~ Seq2))  %>% # sequence of operations differ for SPG and WIN crops
   mutate(PARAMETER2 = case_when(OPERATION == "SOW" ~ round(PHU, 0),
-                                # OPERATION %in% c("FRTK", "FRTP") ~ 0, TRUE ~ 0)) %>%
-                                # OPERATION %in% c("FRTK", "FRTP") ~ 60, TRUE ~ 0)) %>%
-                                # OPERATION %in% c("FRTK", "FRTP") ~ 120, TRUE ~ 0)) %>%
-                                # OPERATION %in% c("FRTK", "FRTP") ~ 180, TRUE ~ 0)) %>%
-                                OPERATION %in% c("FRTK", "FRTP") ~ 240, TRUE ~ 0)) %>%
+                                OPERATION %in% c("FRTK", "FRTP") ~ 25, TRUE ~ 0)) %>%
+  mutate(PARAMETER6 = case_when(OPERATION == "SOW" ~ n, TRUE ~ 0)) %>% # N dose
   mutate(PARAMETER0 = 0.00) %>%
   mutate(PARAMETER100 = 0.00) %>% 
   select(parallel, ctry, runid, scenario, GRID,	CROPID,	CROP,	CropSpec,	
-         OPERATION,LUN, Year, OPMONTH, OPDAY, Seq,	IHC,	TYPE,	PARAMETER1,	PARAMETER2,	PARAMETER3,
-         PARAMETER4, PARAMETER5,	PARAMETER6,	PARAMETER7,	PARAMETER0, PARAMETER100) %>% 
+         OPERATION,LUN, Year, OPMONTH, OPDAY, Seq,	IHC,	TYPE,	
+         PARAMETER1,	PARAMETER2, PARAMETER3, PARAMETER4, PARAMETER5,	
+         PARAMETER6,	PARAMETER7,	PARAMETER0, PARAMETER100) %>% 
   arrange(GRID, scenario, Seq)
 
 
@@ -980,6 +990,8 @@ rm(line8)
 rm(txt)
 rm(txt2)
 rm(txt3)
+
+print("READY TO RUN")
 
 ```
 
